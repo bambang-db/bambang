@@ -15,3 +15,7 @@ Taken from Javanese, meaning 'one who directs with wisdom,' this is the query en
 ### Bindereh
 
 Taken from Madurese, meaning 'nobility,' this is the storage engine where the B+ Tree is implemented, introducing parallel scan and partitioning.
+
+### Matan
+
+Taken from Arabic, meaning 'notes,' this is the catalog storage where the database stores information, similar to `information_schema` and `pg_stats`.
