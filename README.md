@@ -6,13 +6,12 @@
 
 ### Diplomat
 
-A public facing, here the sql is parsed an turned onto AST, and have some validation, like is the table exist, is the column exist, is the
-column have a right data types, etc..
+Taken from English, meaning 'a person who can deal with people in a sensitive and effective way,' this library is public-facing. Here, the SQL is parsed and turned into an AST, and includes some validation, such as whether the table exists, whether the column exists, whether the column has the right data types, etc.
 
 ### Pambudi
 
-Query engine, take AST transoform logical plan, have some optimization, then convert-it into a physical plan
+Taken from Javanese, meaning 'one who directs with wisdom,' this is the query engine. It takes the AST, transforms it into a logical plan, applies some optimizations, then converts it into a physical plan.
 
 ### Bindereh
 
-A storage engine, where B+ Tree, introduce parallel scan and partitioning {insert novelty here}
+Taken from Madurese, meaning 'nobility,' this is the storage engine where the B+ Tree is implemented, introducing parallel scan and partitioning.
