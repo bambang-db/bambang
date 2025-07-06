@@ -116,7 +116,7 @@ impl Value {
         return bytes;
     }
 
-    pub fn from_bytes(&self, bytes: &[u8], offset: &mut usize) -> Result<Self, StorageError> {
+    pub fn from_bytes(bytes: &[u8], offset: &mut usize) -> Result<Self, StorageError> {
         if *offset >= bytes.len() {
             return Err(StorageError::CorruptedData("Unexpected end of data".into()));
         }
