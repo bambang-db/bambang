@@ -4,13 +4,13 @@ pub struct Pool {
 }
 
 impl Pool {
-    pub fn new() {}
+    // pub fn new() {}
 
-    pub fn get_page(&self, page_id: u64) -> Page {
-        todo!()
-    }
+    // pub fn get_page(&self, page_id: u64) -> Page {
+    //     todo!()
+    // }
 
-    pub fn put_page(&self, page: Page) {
-        todo!()
-    }
+    // pub fn put_page(&self, page: Page) {
+    //     todo!()
+    // }
 }
