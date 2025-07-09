@@ -44,7 +44,7 @@ fn test_leaf_page_serialization() {
     assert_eq!(page.is_leaf, deserialized.is_leaf);
     assert_eq!(page.parent_page_id, deserialized.parent_page_id);
     assert_eq!(page.keys, deserialized.keys);
-    assert_eq!(page.values.len(), deserialized.values.len());
+    assert_eq!(page.values, deserialized.values);
     assert_eq!(page.child_page_ids, deserialized.child_page_ids);
     assert_eq!(page.next_leaf_page_id, deserialized.next_leaf_page_id);
     assert_eq!(page.is_dirty, deserialized.is_dirty);
@@ -77,7 +77,7 @@ fn test_internal_page_serialization() {
     assert_eq!(page.parent_page_id, deserialized.parent_page_id);
     assert_eq!(page.keys, deserialized.keys);
     // TODO: Should be test deeply equal
-    assert_eq!(page.values.len(), deserialized.values.len());
+    assert_eq!(page.values, deserialized.values);
     assert_eq!(page.child_page_ids, deserialized.child_page_ids);
     assert_eq!(page.next_leaf_page_id, deserialized.next_leaf_page_id);
     assert_eq!(deserialized.is_dirty, false); // is_dirty is always false after deserialization
@@ -104,7 +104,7 @@ fn test_empty_leaf_page() {
     assert_eq!(page.parent_page_id, deserialized.parent_page_id);
     assert_eq!(page.keys, deserialized.keys);
     // TODO: Should be test deeply equal
-    assert_eq!(page.values.len(), deserialized.values.len());
+    assert_eq!(page.values, deserialized.values);
     assert_eq!(page.child_page_ids, deserialized.child_page_ids);
     assert_eq!(page.next_leaf_page_id, deserialized.next_leaf_page_id);
 }
@@ -130,7 +130,7 @@ fn test_empty_internal_page() {
     assert_eq!(page.parent_page_id, deserialized.parent_page_id);
     assert_eq!(page.keys, deserialized.keys);
     // TODO: Should be test deeply equal
-    assert_eq!(page.values.len(), deserialized.values.len());
+    assert_eq!(page.values, deserialized.values);
     assert_eq!(page.child_page_ids, deserialized.child_page_ids);
     assert_eq!(page.next_leaf_page_id, deserialized.next_leaf_page_id);
 }

@@ -7,13 +7,13 @@ use crate::{
     value::Value,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub id: u64,
     pub data: Vec<Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Page {
     pub page_id: u64,
     pub is_leaf: bool,

@@ -3,3 +3,4 @@ pub mod executor;
 pub mod page;
 pub mod pool;
 pub mod value;
+pub mod manager;
