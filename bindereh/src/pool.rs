@@ -7,6 +7,7 @@ use crate::page::Page;
 
 pub struct Pool {
     cache: Arc<Mutex<HashMap<u64, Arc<Page>>>>,
+    dirty_pages: Arc<Mutex<HashMap<u64, Arc<Page>>>>,
     max_pages: usize,
 }
 
@@ -14,6 +15,7 @@ impl Pool {
     pub fn new(max_pages: usize) -> Self {
         Self {
             cache: Arc::new(Mutex::new(HashMap::new())),
+            dirty_pages: Arc::new(Mutex::new(HashMap::new())),
             max_pages,
         }
     }
@@ -33,5 +35,21 @@ impl Pool {
         }
 
         cache.insert(page_id, node.clone());
+
+        if node.is_dirty {
+            self.dirty_pages.lock().unwrap().insert(page_id, node);
+        }
+    }
+
+    pub fn mark_dirty(&self, page_id: u64, node: Arc<Page>) {
+        self.dirty_pages.lock().unwrap().insert(page_id, node);
+    }
+
+    pub fn get_dirty_pages(&self) -> Vec<Arc<Page>> {
+        self.dirty_pages.lock().unwrap().values().cloned().collect()
+    }
+
+    pub fn clear_dirty(&self, page_id: u64) {
+        self.dirty_pages.lock().unwrap().remove(&page_id);
     }
 }
