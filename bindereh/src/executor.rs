@@ -266,14 +266,16 @@ impl Executor {
         Ok(())
     }
 
-    pub async fn update() {}
+    pub async fn update(&self, key: u64, row: Row) -> Result<bool, StorageError> {
+        let root_page_id = *self.root_page_id.lock().unwrap();
+        self.update_op.execute(key, row, root_page_id).await
+    }
 
     pub async fn delete(&self, options: DeleteOptions) -> Result<(), StorageError> {
         let result = self.delete_op.execute(options).await.unwrap();
 
         match result {
             DeleteResult::Truncated => {
-                // Reset root_page_id to 1
                 *self.root_page_id.lock().unwrap() = 1;
                 Ok(())
             }

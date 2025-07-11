@@ -6,7 +6,6 @@ pub struct DeleteOperation {
     storage_manager: Arc<Manager>,
 }
 
-/// Result type for delete operations
 #[derive(Debug, Clone)]
 pub enum DeleteResult {
     Single(bool),
@@ -57,7 +56,6 @@ impl DeleteOperation {
         }
     }
 
-    /// Delete a single row by key (internal implementation)
     async fn delete_by_key(&self, key: u64) -> Result<bool, StorageError> {
         Ok(true)
     }

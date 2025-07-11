@@ -3,10 +3,7 @@ use std::sync::Arc;
 use bindereh::{
     executor::Executor,
     manager::Manager,
-    operator::{
-        delete::{DeleteOptions, DeleteType},
-        scan::ScanOptions,
-    },
+    operator::scan::ScanOptions,
     page::{Page, Row},
     value::Value,
 };
@@ -35,7 +32,7 @@ async fn main() {
     let executor = Executor::new(manager.clone(), current_root_page_id, 2);
 
     // Insert multiple rows to potentially trigger splits
-    for i in 1..=20 {
+    for i in 1..=10 {
         let row = Row {
             id: i,
             data: vec![
@@ -56,14 +53,6 @@ async fn main() {
 
     // Read the final root page
     // executor.debug_print_tree().await.unwrap();
-    // let sequential_result = executor
-    //     .scan(ScanOptions {
-    //         limit: Some(10),
-    //         ..Default::default()
-    //     })
-    //     .await
-    //     .unwrap();
-    // println!("sequential_result : {:#?}", sequential_result.rows.len());
 
     // executor
     //     .delete(DeleteOptions {
@@ -72,5 +61,26 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    executor.debug_print_tree().await.unwrap();
+    let row = Row {
+        id: 1,
+        data: vec![
+            Value::Integer(11),
+            Value::String(format!("User New {}", 11)),
+            Value::Boolean(false),
+        ],
+    };
+
+    executor.update(1, row).await.unwrap();
+
+    let sequential_result = executor
+        .scan(ScanOptions {
+            limit: Some(2),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    
+    println!("sequential_result : {:#?}", sequential_result.rows);
+
+    // executor.debug_print_tree().await.unwrap();
 }

@@ -14,27 +14,26 @@ impl UpdateOperation {
     pub async fn execute(
         &self,
         key: u64,
-        new_row: Row,
+        row: Row,
         root_page_id: u64,
     ) -> Result<bool, StorageError> {
         let root_page = self.storage_manager.read_page(root_page_id).await?;
+
+        // Find the leaf node containing the old key
         let leaf_page_id =
             TreeOperations::find_leaf_for_key(&self.storage_manager, key, &root_page).await?;
-        let leaf_page_arc = self.storage_manager.read_page(leaf_page_id).await?;
+        let mut leaf_node = (*self.storage_manager.read_page(leaf_page_id).await?).clone();
 
-        let mut leaf_page_data = (*leaf_page_arc).clone();
-
-        // Find the key in the leaf page
-        if let Ok(pos) = leaf_page_data.keys.binary_search(&key) {
-            // Update the row
-            leaf_page_data.values[pos] = new_row;
-            leaf_page_data.is_dirty = true;
-
-            // Write back to storage
-            self.storage_manager.write_page(&leaf_page_data).await?;
-            Ok(true)
-        } else {
-            Ok(false) // Key not found
+        // Find the exact position of the old key
+        match leaf_node.keys.binary_search(&key) {
+            Ok(pos) => {
+                // Simple update - key stays the same, just update the data
+                leaf_node.values[pos] = row;
+                leaf_node.is_dirty = true;
+                self.storage_manager.write_page(&leaf_node).await?;
+                Ok(true)
+            }
+            Err(_) => Ok(false),
         }
     }
 }
