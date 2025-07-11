@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bindereh::{
-    executor::Executor,
+    executor::{Executor, ScanOptions},
     manager::Manager,
     page::{Page, Row},
     value::Value,
@@ -57,4 +57,6 @@ async fn main() {
 
     // Read the final root page
     executor.debug_print_tree().await.unwrap();
+
+    executor.scan(ScanOptions::default()).await.unwrap();
 }

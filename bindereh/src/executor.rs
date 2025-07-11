@@ -6,14 +6,42 @@ use crate::{
     page::{Page, Row},
 };
 
-// Scan condition for filtering
-#[derive(Debug, Clone, PartialEq)]
-pub enum ScanCondition {
-    Equal(u64),       // key = value
-    Range(u64, u64),  // key BETWEEN start AND end
-    GreaterThan(u64), // key > value
-    LessThan(u64),    // key < value
-    All,              // no condition (full scan)
+#[derive(Debug, Clone)]
+pub enum ScanFilter {
+    Range {
+        start: Option<u64>,
+        end: Option<u64>,
+    },
+    Equals(u64),
+    GreaterThan(u64),
+    LessThan(u64),
+    In(Vec<u64>),
+}
+
+#[derive(Debug, Clone)]
+pub struct ScanOptions {
+    pub filter: Option<ScanFilter>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    pub parallel: bool,
+}
+
+impl Default for ScanOptions {
+    fn default() -> Self {
+        Self {
+            filter: None,
+            limit: None,
+            offset: None,
+            parallel: true,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ScanResult {
+    pub rows: Vec<Row>,
+    pub total_scanned: usize,
+    pub pages_read: usize,
 }
 
 pub struct Executor {
@@ -33,7 +61,37 @@ impl Executor {
         }
     }
 
-    pub async fn scan() {}
+    pub async fn scan(&self, options: ScanOptions) -> Result<ScanResult, StorageError> {
+        let root_id = *self.root_page_id.lock().unwrap();
+
+        // Get the leftmost leaf page (start of sequential scan)
+        let leftmost_leaf_id = self
+            .find_leftmost_leaf(root_id)
+            .await?
+            .expect("Cannot get leafmost_leaf_id");
+
+        if options.parallel && self.max_workers > 1 {
+            self.parallel_scan(leftmost_leaf_id, options).await
+        } else {
+            self.sequential_scan(leftmost_leaf_id, options).await
+        }
+    }
+
+    async fn sequential_scan(
+        &self,
+        start_leaf_id: u64,
+        options: ScanOptions,
+    ) -> Result<ScanResult, StorageError> {
+        todo!()
+    }
+
+    async fn parallel_scan(
+        &self,
+        start_leaf_id: u64,
+        options: ScanOptions,
+    ) -> Result<ScanResult, StorageError> {
+        todo!()
+    }
 
     pub async fn parallel() {}
 
