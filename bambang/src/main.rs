@@ -53,5 +53,12 @@ async fn main() {
 
     // Read the final root page
     // executor.debug_print_tree().await.unwrap();
-    executor.scan(ScanOptions::default()).await.unwrap();
+    let sequential_result = executor
+        .scan(ScanOptions {
+            limit: Some(10),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    println!("sequential_result : {:#?}", sequential_result.rows.len());
 }
