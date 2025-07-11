@@ -31,7 +31,7 @@ async fn main() {
     let executor = Executor::new(manager.clone(), current_root_page_id, 2);
 
     // Insert multiple rows to potentially trigger splits
-    for i in 1..=10 {
+    for i in 1..=20 {
         let row = Row {
             id: i,
             data: vec![
@@ -56,7 +56,5 @@ async fn main() {
     }
 
     // Read the final root page
-    let root_page = manager.read_page(current_root_page_id).await.unwrap();
-    println!("Final root page ID: {}", current_root_page_id);
-    println!("Root page content: {:#?}", root_page);
+    executor.debug_print_tree().await.unwrap();
 }

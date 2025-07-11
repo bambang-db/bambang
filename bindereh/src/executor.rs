@@ -273,4 +273,136 @@ impl Executor {
     pub async fn update() {}
 
     pub async fn destroy() {}
+
+    // Utility function to get tree height (for debugging)
+    pub async fn get_tree_height(&self) -> Result<usize, StorageError> {
+        let root_id = *self.root_page_id.lock().unwrap();
+        self.calculate_height(root_id).await
+    }
+
+    async fn calculate_height(&self, page_id: u64) -> Result<usize, StorageError> {
+        let page = self.storage_manager.read_page(page_id).await?;
+        if page.is_leaf {
+            Ok(1)
+        } else if !page.child_page_ids.is_empty() {
+            let child_height = Box::pin(self.calculate_height(page.child_page_ids[0])).await?;
+            Ok(child_height + 1)
+        } else {
+            Ok(1)
+        }
+    }
+
+    // Debug function to print tree structure
+    pub async fn debug_print_tree(&self) -> Result<(), StorageError> {
+        let root_id = *self.root_page_id.lock().unwrap();
+        println!("\n┌─────────────────────────────────────────────────────────────┐");
+        println!("│                        B+ Tree Structure                    │");
+        println!("└─────────────────────────────────────────────────────────────┘");
+        self.print_subtree(root_id, 0, true, String::new()).await?;
+
+        // Print leaf level connections
+        println!("\nLeaf Level Connections:");
+        self.print_leaf_connections(root_id).await?;
+        Ok(())
+    }
+
+    async fn print_subtree(
+        &self,
+        page_id: u64,
+        depth: usize,
+        is_last: bool,
+        prefix: String,
+    ) -> Result<(), StorageError> {
+        let page = self.storage_manager.read_page(page_id).await?;
+
+        // Print current node
+        let connector = if depth == 0 {
+            "ROOT"
+        } else if is_last {
+            "└── "
+        } else {
+            "├── "
+        };
+
+        let node_type = if page.is_leaf { " LEAF" } else { " INTERNAL" };
+        let keys_str = page
+            .keys
+            .iter()
+            .map(|k| k.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        println!(
+            "{}{}{} [{}] │ {} │",
+            prefix, connector, node_type, page_id, keys_str
+        );
+
+        // Print children for internal nodes
+        if !page.is_leaf {
+            let new_prefix = if depth == 0 {
+                String::new()
+            } else if is_last {
+                format!("{}    ", prefix)
+            } else {
+                format!("{}│   ", prefix)
+            };
+
+            for (i, &child_id) in page.child_page_ids.iter().enumerate() {
+                let is_last_child = i == page.child_page_ids.len() - 1;
+                Box::pin(self.print_subtree(
+                    child_id,
+                    depth + 1,
+                    is_last_child,
+                    new_prefix.clone(),
+                ))
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn print_leaf_connections(&self, page_id: u64) -> Result<(), StorageError> {
+        let mut current_leaf = self.find_leftmost_leaf(page_id).await?;
+        let mut leaf_chain = Vec::new();
+
+        // Collect all leaf pages in order
+        while let Some(leaf_id) = current_leaf {
+            let page = self.storage_manager.read_page(leaf_id).await?;
+            leaf_chain.push((leaf_id, page.keys.clone()));
+            current_leaf = page.next_leaf_page_id;
+        }
+
+        // Print the leaf chain
+        if !leaf_chain.is_empty() {
+            print!("🍃 ");
+            for (i, (page_id, keys)) in leaf_chain.iter().enumerate() {
+                let keys_str = keys
+                    .iter()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                print!("[{}:{}]", page_id, keys_str);
+
+                if i < leaf_chain.len() - 1 {
+                    print!(" → ");
+                }
+            }
+            println!(" → NULL");
+        }
+
+        Ok(())
+    }
+
+    async fn find_leftmost_leaf(&self, page_id: u64) -> Result<Option<u64>, StorageError> {
+        let page = self.storage_manager.read_page(page_id).await?;
+
+        if page.is_leaf {
+            Ok(Some(page_id))
+        } else if !page.child_page_ids.is_empty() {
+            Box::pin(self.find_leftmost_leaf(page.child_page_ids[0])).await
+        } else {
+            Ok(None)
+        }
+    }
 }
