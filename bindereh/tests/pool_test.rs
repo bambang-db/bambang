@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
-use bindereh::{
-    page::{Page, Row},
-    pool::Pool,
-    value::Value,
-};
+use bindereh::{page::Page, pool::Pool};
+use shared_types::{Row, Value};
 
 #[test]
 fn test_page_pool() {

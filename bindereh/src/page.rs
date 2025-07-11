@@ -1,17 +1,8 @@
 use std::io::{Cursor, Write};
 
+use crate::common::{MAGIC_NUMBER, NODE_HEADER_SIZE, PAGE_SIZE, StorageError};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
-use crate::{
-    common::{MAGIC_NUMBER, NODE_HEADER_SIZE, PAGE_SIZE, StorageError},
-    value::Value,
-};
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Row {
-    pub id: u64,
-    pub data: Vec<Value>,
-}
+use shared_types::{Row, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Page {

@@ -46,6 +46,7 @@ dependencies = [
  "diplomat",
  "matan",
  "pambudi",
+ "shared_types",
  "sqlparser",
  "tokio",
 ]
@@ -75,6 +76,7 @@ name = "bindereh"
 version = "0.1.0"
 dependencies = [
  "byteorder",
+ "shared_types",
 ]
 
 [[package]]
@@ -161,8 +163,8 @@ name = "matan"
 version = "0.1.0"
 dependencies = [
  "bincode",
- "bindereh",
  "serde",
+ "shared_types",
 ]
 
 [[package]]
@@ -319,6 +321,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "shared_types"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "byteorder",
+ "serde",
 ]
 
 [[package]]

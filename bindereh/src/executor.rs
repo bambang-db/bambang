@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use shared_types::Row;
+
 use crate::{
     common::StorageError,
     manager::Manager,
@@ -10,7 +12,6 @@ use crate::{
         scan::{ScanOperation, ScanOptions, ScanResult},
         update::UpdateOperation,
     },
-    page::Row,
 };
 
 pub struct Executor {

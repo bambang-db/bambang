@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use crate::{common::StorageError, manager::Manager, operator::tree::TreeOperations, page::Row};
+use shared_types::Row;
+
+use crate::{common::StorageError, manager::Manager, operator::tree::TreeOperations};
 
 pub struct UpdateOperation {
     storage_manager: Arc<Manager>,

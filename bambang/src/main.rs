@@ -1,12 +1,7 @@
 use std::sync::Arc;
 
-use bindereh::{
-    executor::Executor,
-    manager::Manager,
-    operator::scan::ScanOptions,
-    page::{Page, Row},
-    value::Value,
-};
+use bindereh::{executor::Executor, manager::Manager, operator::scan::ScanOptions, page::Page};
+use shared_types::{Row, Value};
 
 #[tokio::main]
 async fn main() {

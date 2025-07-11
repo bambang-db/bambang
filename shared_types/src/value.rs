@@ -1,4 +1,6 @@
-use crate::common::StorageError;
+//! Value types for database storage
+
+use crate::error::StorageError;
 use std::convert::TryInto;
 
 #[derive(Debug, PartialEq, Clone)]

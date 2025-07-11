@@ -1,4 +1,4 @@
-use bindereh::value::Value;
+use shared_types::Value;
 
 #[test]
 fn test_null_serialization() {

@@ -1,110 +1,10 @@
 use std::sync::Arc;
 
-use crate::{
-    common::StorageError, manager::Manager, operator::tree::TreeOperations, page::Row, value::Value,
-};
+use shared_types::{Row, StorageError};
+use crate::{manager::Manager, operator::tree::TreeOperations};
 
-// Enhanced filtering with column-level predicates
-#[derive(Debug, Clone)]
-pub enum Predicate {
-    // Column-based predicates
-    ColumnEquals {
-        column: String,
-        value: Value,
-    },
-    ColumnNotEquals {
-        column: String,
-        value: Value,
-    },
-    ColumnGreaterThan {
-        column: String,
-        value: Value,
-    },
-    ColumnLessThan {
-        column: String,
-        value: Value,
-    },
-    ColumnGreaterThanOrEqual {
-        column: String,
-        value: Value,
-    },
-    ColumnLessThanOrEqual {
-        column: String,
-        value: Value,
-    },
-    ColumnIn {
-        column: String,
-        values: Vec<Value>,
-    },
-    ColumnNotIn {
-        column: String,
-        values: Vec<Value>,
-    },
-    ColumnIsNull {
-        column: String,
-    },
-    ColumnIsNotNull {
-        column: String,
-    },
-    ColumnLike {
-        column: String,
-        pattern: String,
-    },
-    ColumnBetween {
-        column: String,
-        start: Value,
-        end: Value,
-    },
-
-    // Logical operators
-    And(Box<Predicate>, Box<Predicate>),
-    Or(Box<Predicate>, Box<Predicate>),
-    Not(Box<Predicate>),
-}
-
-#[derive(Debug, Clone)]
-pub struct ScanOptions {
-    pub predicate: Option<Predicate>,
-    pub projection: Option<Vec<String>>, // Column names to select
-    pub limit: Option<usize>,
-    pub offset: Option<usize>,
-    pub parallel: bool,
-    pub order_by: Option<Vec<OrderBy>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct OrderBy {
-    pub column: String,
-    pub direction: SortDirection,
-}
-
-#[derive(Debug, Clone)]
-pub enum SortDirection {
-    Ascending,
-    Descending,
-}
-
-impl Default for ScanOptions {
-    fn default() -> Self {
-        Self {
-            predicate: None,
-            projection: None,
-            limit: None,
-            offset: None,
-            parallel: true,
-            order_by: None,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ScanResult {
-    pub rows: Vec<Row>,
-    pub total_scanned: usize,
-    pub pages_read: usize,
-    pub filtered_count: usize,
-    // pub schema: Option<Schema>, // Schema for the result set
-}
+// Re-export scan types from shared_types for backward compatibility
+pub use shared_types::{Predicate, ScanOptions, OrderBy, SortDirection, ScanResult, Schema};
 
 pub struct ScanOperation {
     storage_manager: Arc<Manager>,
@@ -172,6 +72,7 @@ impl ScanOperation {
             total_scanned: 0,
             pages_read: 0,
             filtered_count: 0,
+            result_schema: options.schema,
         })
     }
 }

@@ -8,5 +8,6 @@ bindereh = { path = "../bindereh" }
 matan = { path = "../matan" }
 pambudi = { path = "../pambudi" }
 diplomat = { path = "../diplomat" }
+shared_types = { path = "../shared_types" }
 tokio = { version = "1.46.1", features = ["full"] }
 sqlparser = "0.57.0"

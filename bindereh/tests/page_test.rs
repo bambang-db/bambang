@@ -1,8 +1,8 @@
 use bindereh::{
     common::{NODE_HEADER_SIZE, PAGE_SIZE, StorageError},
-    page::{Page, Row},
-    value::Value,
+    page::{Page}
 };
+use shared_types::{Row, Value};
 
 #[test]
 fn test_leaf_page_serialization() {
