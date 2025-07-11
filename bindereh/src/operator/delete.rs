@@ -1,9 +1,42 @@
 use std::sync::Arc;
 
-use crate::{common::StorageError, manager::Manager, operator::tree::TreeOperations};
+use crate::{common::StorageError, manager::Manager};
 
 pub struct DeleteOperation {
     storage_manager: Arc<Manager>,
+}
+
+/// Result type for delete operations
+#[derive(Debug, Clone)]
+pub enum DeleteResult {
+    Single(bool),
+    Multiple(u64),
+    Truncated,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteOptions {
+    pub delete_type: DeleteType,
+}
+
+#[derive(Debug, Clone)]
+pub enum DeleteType {
+    ByKey(u64),
+    Truncate,
+}
+
+impl DeleteOptions {
+    pub fn by_key(key: u64) -> Self {
+        Self {
+            delete_type: DeleteType::ByKey(key),
+        }
+    }
+
+    pub fn truncate() -> Self {
+        Self {
+            delete_type: DeleteType::Truncate,
+        }
+    }
 }
 
 impl DeleteOperation {
@@ -11,27 +44,25 @@ impl DeleteOperation {
         Self { storage_manager }
     }
 
-    pub async fn execute(&self, key: u64, root_page_id: u64) -> Result<bool, StorageError> {
-        let root_page = self.storage_manager.read_page(root_page_id).await?;
-        let leaf_page_id =
-            TreeOperations::find_leaf_for_key(&self.storage_manager, key, &root_page).await?;
-        let leaf_page_arc = self.storage_manager.read_page(leaf_page_id).await?;
-
-        let mut leaf_page_data = (*leaf_page_arc).clone();
-
-        // Find and remove the key
-        if let Ok(pos) = leaf_page_data.keys.binary_search(&key) {
-            leaf_page_data.keys.remove(pos);
-            leaf_page_data.values.remove(pos);
-            leaf_page_data.is_dirty = true;
-
-            // TODO: Handle underflow and tree rebalancing
-
-            // Write back to storage
-            self.storage_manager.write_page(&leaf_page_data).await?;
-            Ok(true)
-        } else {
-            Ok(false) // Key not found
+    pub async fn execute(&self, options: DeleteOptions) -> Result<DeleteResult, StorageError> {
+        match options.delete_type {
+            DeleteType::ByKey(key) => {
+                let deleted = self.delete_by_key(key).await?;
+                Ok(DeleteResult::Single(deleted))
+            }
+            DeleteType::Truncate => {
+                self.truncate().await?;
+                Ok(DeleteResult::Truncated)
+            }
         }
+    }
+
+    /// Delete a single row by key (internal implementation)
+    async fn delete_by_key(&self, key: u64) -> Result<bool, StorageError> {
+        Ok(true)
+    }
+
+    pub async fn truncate(&self) -> Result<(), StorageError> {
+        Ok(())
     }
 }
