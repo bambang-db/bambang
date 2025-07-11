@@ -4,7 +4,7 @@ use crate::{
     common::{MAX_KEYS_PER_NODE, StorageError},
     manager::Manager,
     operator::{
-        delete::DeleteOperation,
+        delete::{DeleteOperation, DeleteOptions, DeleteResult},
         insert::InsertOperation,
         print::TreePrinter,
         scan::{ScanOperation, ScanOptions, ScanResult},
@@ -268,7 +268,18 @@ impl Executor {
 
     pub async fn update() {}
 
-    pub async fn destroy() {}
+    pub async fn delete(&self, options: DeleteOptions) -> Result<(), StorageError> {
+        let result = self.delete_op.execute(options).await.unwrap();
+
+        match result {
+            DeleteResult::Truncated => {
+                // Reset root_page_id to 1
+                *self.root_page_id.lock().unwrap() = 1;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
 
     pub async fn debug_print_tree(&self) -> Result<(), StorageError> {
         let root_id = *self.root_page_id.lock().unwrap();

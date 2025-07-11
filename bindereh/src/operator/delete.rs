@@ -63,6 +63,7 @@ impl DeleteOperation {
     }
 
     pub async fn truncate(&self) -> Result<(), StorageError> {
+        self.storage_manager.truncate().await?;
         Ok(())
     }
 }

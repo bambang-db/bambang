@@ -89,4 +89,35 @@ impl Manager {
 
         Ok(())
     }
+
+    pub async fn truncate(&self) -> Result<(), StorageError> {
+        self.buffer_pool.clear_all();
+
+        {
+            let mut next_id = self.next_page_id.lock().unwrap();
+            *next_id = 1;
+        }
+
+        {
+            let file = self.file.lock().unwrap();
+            file.set_len(0)?;
+            file.sync_all()?;
+        }
+
+        // init the b+ tree page again from the beginning (mulai dari 0 ya kaks)
+        let root_node = Page {
+            page_id: *self.next_page_id.lock().unwrap(),
+            is_leaf: true,
+            parent_page_id: None,
+            keys: vec![],
+            values: vec![],
+            child_page_ids: vec![],
+            next_leaf_page_id: None,
+            is_dirty: true,
+        };
+
+        self.write_page(&root_node).await.unwrap();
+
+        Ok(())
+    }
 }
