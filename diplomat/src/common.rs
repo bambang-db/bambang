@@ -1,8 +1,8 @@
 #[derive(Debug)]
 pub enum CatalogError {
     IoError(std::io::Error),
-    SerializationError(String),
-    DeserializationError(String),
+    SerializationError(bincode::error::EncodeError),
+    DeserializationError(bincode::error::DecodeError),
     TableExists(String),
     TableNotFound(String),
     ColumnExists(String),

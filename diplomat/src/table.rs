@@ -1,9 +1,10 @@
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::schema::Schema;
 
 // Simplified table catalog
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct TableCatalog {
     pub table_name: String,
     pub schema: Schema,

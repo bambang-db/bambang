@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use bincode::{Decode, Encode};
 use bindereh::page::Row;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub enum DataType {
     Integer,
     String,
@@ -24,7 +25,7 @@ pub enum DataType {
     TinyInt,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Column {
     pub name: String,
     pub data_type: DataType,
@@ -33,7 +34,7 @@ pub struct Column {
 }
 
 // Core schema types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Schema {
     pub columns: Vec<Column>,
     pub column_map: HashMap<String, usize>, // Map column names to indices
