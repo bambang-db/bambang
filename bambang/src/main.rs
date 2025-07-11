@@ -1,4 +1,4 @@
-use diplomat::{
+use matan::{
     manager::CatalogManager,
     schema::{Column, DataType, Schema},
 };

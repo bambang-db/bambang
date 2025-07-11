@@ -5,6 +5,6 @@ edition = "2024"
 
 [dependencies]
 bindereh = { path = "../bindereh" }
-diplomat = { path = "../diplomat" }
+matan = { path = "../matan" }
 pambudi = { path = "../pambudi" }
 tokio = { version = "1.46.1", features = ["full"] }

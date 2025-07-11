@@ -43,7 +43,7 @@ name = "bambang"
 version = "0.1.0"
 dependencies = [
  "bindereh",
- "diplomat",
+ "matan",
  "pambudi",
  "tokio",
 ]
@@ -102,11 +102,6 @@ checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 [[package]]
 name = "diplomat"
 version = "0.1.0"
-dependencies = [
- "bincode",
- "bindereh",
- "serde",
-]
 
 [[package]]
 name = "gimli"
@@ -144,6 +139,11 @@ dependencies = [
 [[package]]
 name = "matan"
 version = "0.1.0"
+dependencies = [
+ "bincode",
+ "bindereh",
+ "serde",
+]
 
 [[package]]
 name = "memchr"
