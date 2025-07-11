@@ -62,6 +62,10 @@ impl Manager {
         file.write_all(&bytes)?;
         file.sync_all()?; // Force flush to disk
 
+        // Update the buffer pool cache with the new data
+        let node_arc = Arc::new(node.clone());
+        self.buffer_pool.put_page(node.page_id, node_arc);
+
         // Clear from dirty pages
         self.buffer_pool.clear_dirty(node.page_id);
 

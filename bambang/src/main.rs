@@ -9,12 +9,14 @@ use bindereh::{
 
 #[tokio::main]
 async fn main() {
-    let manager = Manager::new("bambang.db", 128).unwrap();
+    let manager = Arc::new(Manager::new("bambang.db", 128).unwrap());
 
     // Create initial root node
-    let root_page_id = manager.allocate_page().await;
+    let mut current_root_page_id = manager.allocate_page().await;
+    println!("Initial root page ID: {}", current_root_page_id);
+
     let root_node = Page {
-        page_id: root_page_id,
+        page_id: current_root_page_id,
         is_leaf: true,
         parent_page_id: None,
         keys: vec![],
@@ -26,8 +28,9 @@ async fn main() {
 
     manager.write_page(&root_node).await.unwrap();
 
-    let executor = Executor::new(Arc::new(manager), root_page_id, 2);
+    let executor = Executor::new(manager.clone(), current_root_page_id, 2);
 
+    // Insert multiple rows to potentially trigger splits
     for i in 1..=10 {
         let row = Row {
             id: i,
@@ -38,6 +41,22 @@ async fn main() {
             ],
         };
 
-        executor.insert(row).await.unwrap();
+        // Get the root page ID after insertion (it might change due to splits)
+        let new_root_id = executor.insert(row).await.unwrap();
+
+        if new_root_id != current_root_page_id {
+            println!(
+                "Root page ID changed from {} to {} after inserting row {}",
+                current_root_page_id, new_root_id, i
+            );
+            current_root_page_id = new_root_id;
+
+            // Here you would update your catalog with the new root_page_id
+        }
     }
+
+    // Read the final root page
+    let root_page = manager.read_page(current_root_page_id).await.unwrap();
+    println!("Final root page ID: {}", current_root_page_id);
+    println!("Root page content: {:#?}", root_page);
 }
