@@ -1,6 +1,19 @@
 use std::sync::Arc;
 
-use crate::{common::{StorageError, MAX_KEYS_PER_NODE}, manager::Manager, page::Page};
+use crate::{
+    common::{MAX_KEYS_PER_NODE, StorageError},
+    manager::Manager,
+    page::Page,
+};
+
+/// Result of a node split operation
+#[derive(Debug)]
+pub enum SplitResult {
+    /// A new root was created with the given ID
+    NewRoot(u64),
+    /// A key was promoted to the parent with the new right child ID
+    PromotedKey(u64, u64),
+}
 
 pub struct TreeOperations;
 
@@ -29,10 +42,11 @@ impl TreeOperations {
         Box::pin(Self::find_leaf_for_key(storage_manager, key, &child_node)).await
     }
 
+    /// Split a leaf node and return the promoted key and new root ID if a new root was created
     pub async fn split_leaf_node(
         storage_manager: &Arc<Manager>,
         node: &mut Page,
-    ) -> Result<Option<u64>, StorageError> {
+    ) -> Result<SplitResult, StorageError> {
         let mid_point = node.keys.len() / 2;
         let new_page_id = storage_manager.allocate_page().await;
 
@@ -52,14 +66,18 @@ impl TreeOperations {
 
         storage_manager.write_page(&new_node).await?;
 
+        // If this is the root node, create a new root
         if node.parent_page_id.is_none() {
-            Self::create_new_root(storage_manager, node.page_id, promoted_key, new_page_id).await?;
-            return Ok(None);
+            let new_root_id =
+                Self::create_new_root(storage_manager, node.page_id, promoted_key, new_page_id)
+                    .await?;
+            return Ok(SplitResult::NewRoot(new_root_id));
         }
 
-        Ok(Some(promoted_key))
+        Ok(SplitResult::PromotedKey(promoted_key, new_page_id))
     }
 
+    /// Create a new root node and return the new root ID
     pub async fn create_new_root(
         storage_manager: &Arc<Manager>,
         left_child_id: u64,
@@ -78,7 +96,7 @@ impl TreeOperations {
             is_dirty: true,
         };
 
-        // Update parent pointers
+        // Update parent pointers for the children
         let mut left_child = (*storage_manager.read_page(left_child_id).await?).clone();
         left_child.parent_page_id = Some(new_root_id);
         left_child.is_dirty = true;
@@ -94,12 +112,13 @@ impl TreeOperations {
         Ok(new_root_id)
     }
 
+    /// Insert a key into the parent node, handling splits recursively
     pub async fn insert_into_parent(
         storage_manager: &Arc<Manager>,
         parent_page_id: Option<u64>,
         key: u64,
         right_child_id: u64,
-    ) -> Result<(), StorageError> {
+    ) -> Result<Option<u64>, StorageError> {
         if let Some(parent_id) = parent_page_id {
             let mut parent_node = (*storage_manager.read_page(parent_id).await?).clone();
 
@@ -114,31 +133,44 @@ impl TreeOperations {
                 .insert(insert_pos + 1, right_child_id);
             parent_node.is_dirty = true;
 
+            // Check if parent needs to be split
             if parent_node.keys.len() > MAX_KEYS_PER_NODE {
-                let promoted_key =
+                let split_result =
                     Self::split_internal_node(storage_manager, &mut parent_node).await?;
 
-                if let Some(promoted) = promoted_key {
-                    Box::pin(Self::insert_into_parent(
-                        storage_manager,
-                        parent_node.parent_page_id,
-                        promoted,
-                        parent_node.child_page_ids.last().cloned().unwrap(),
-                    ))
-                    .await?;
+                match split_result {
+                    SplitResult::NewRoot(new_root_id) => {
+                        // Write the modified parent node
+                        storage_manager.write_page(&parent_node).await?;
+                        return Ok(Some(new_root_id));
+                    }
+                    SplitResult::PromotedKey(promoted_key, new_right_child_id) => {
+                        // Write the modified parent node
+                        storage_manager.write_page(&parent_node).await?;
+
+                        // Recursively insert the promoted key into grandparent
+                        return Box::pin(Self::insert_into_parent(
+                            storage_manager,
+                            parent_node.parent_page_id,
+                            promoted_key,
+                            new_right_child_id,
+                        ))
+                        .await;
+                    }
                 }
             }
 
             storage_manager.write_page(&parent_node).await?;
         }
 
-        Ok(())
+        Ok(None)
     }
 
+    /// Split an internal node and return the promoted key and new root ID if a new root was created
     pub async fn split_internal_node(
         storage_manager: &Arc<Manager>,
         node: &mut Page,
-    ) -> Result<Option<u64>, StorageError> {
+    ) -> Result<SplitResult, StorageError> {
         let mid_point = node.keys.len() / 2;
         let promoted_key = node.keys[mid_point];
 
@@ -147,14 +179,15 @@ impl TreeOperations {
             page_id: new_page_id,
             is_leaf: false,
             parent_page_id: node.parent_page_id,
-            keys: node.keys.split_off(mid_point + 1),
+            keys: node.keys.split_off(mid_point + 1), // Skip the promoted key
             values: Vec::new(),
             child_page_ids: node.child_page_ids.split_off(mid_point + 1),
             next_leaf_page_id: None,
             is_dirty: true,
         };
 
-        node.keys.pop();
+        // Remove the promoted key from the original node
+        node.keys.pop(); // Remove the promoted key
         node.is_dirty = true;
 
         // Update parent pointers for moved children
@@ -167,12 +200,15 @@ impl TreeOperations {
 
         storage_manager.write_page(&new_node).await?;
 
+        // If this is the root node, create a new root
         if node.parent_page_id.is_none() {
-            Self::create_new_root(storage_manager, node.page_id, promoted_key, new_page_id).await?;
-            return Ok(None);
+            let new_root_id =
+                Self::create_new_root(storage_manager, node.page_id, promoted_key, new_page_id)
+                    .await?;
+            return Ok(SplitResult::NewRoot(new_root_id));
         }
 
-        Ok(Some(promoted_key))
+        Ok(SplitResult::PromotedKey(promoted_key, new_page_id))
     }
 
     pub async fn find_leftmost_leaf(

@@ -7,4 +7,6 @@ edition = "2024"
 bindereh = { path = "../bindereh" }
 matan = { path = "../matan" }
 pambudi = { path = "../pambudi" }
+diplomat = { path = "../diplomat" }
 tokio = { version = "1.46.1", features = ["full"] }
+sqlparser = "0.57.0"
