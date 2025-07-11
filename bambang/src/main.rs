@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use bindereh::{
-    executor::{Executor, ScanOptions},
-    manager::Manager,
-    page::{Page, Row},
-    value::Value,
+    executor::Executor, manager::Manager, operator::scan::ScanOptions, page::{Page, Row}, value::Value
 };
 
 #[tokio::main]
@@ -58,5 +55,5 @@ async fn main() {
     // Read the final root page
     executor.debug_print_tree().await.unwrap();
 
-    executor.scan(ScanOptions::default()).await.unwrap();
+    // executor.scan(ScanOptions::default()).await.unwrap();
 }

@@ -5,3 +5,4 @@ pub mod pool;
 pub mod value;
 pub mod manager;
 pub mod debug;
+pub mod operator;

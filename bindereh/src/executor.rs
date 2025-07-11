@@ -3,61 +3,51 @@ use std::sync::{Arc, Mutex};
 use crate::{
     common::{MAX_KEYS_PER_NODE, StorageError},
     manager::Manager,
+    operator::{
+        delete::DeleteOperation,
+        insert::InsertOperation,
+        print::TreePrinter,
+        scan::{ScanOperation, ScanOptions, ScanResult},
+        tree::TreeOperations,
+        update::UpdateOperation,
+    },
     page::{Page, Row},
 };
-
-#[derive(Debug, Clone)]
-pub enum ScanFilter {
-    Range {
-        start: Option<u64>,
-        end: Option<u64>,
-    },
-    Equals(u64),
-    GreaterThan(u64),
-    LessThan(u64),
-    In(Vec<u64>),
-}
-
-#[derive(Debug, Clone)]
-pub struct ScanOptions {
-    pub filter: Option<ScanFilter>,
-    pub limit: Option<usize>,
-    pub offset: Option<usize>,
-    pub parallel: bool,
-}
-
-impl Default for ScanOptions {
-    fn default() -> Self {
-        Self {
-            filter: None,
-            limit: None,
-            offset: None,
-            parallel: true,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ScanResult {
-    pub rows: Vec<Row>,
-    pub total_scanned: usize,
-    pub pages_read: usize,
-}
 
 pub struct Executor {
     pub storage_manager: Arc<Manager>,
     pub root_page_id: Arc<Mutex<u64>>,
     pub max_workers: usize,
     pub batch_size: usize,
+
+    // Operations
+    insert_op: InsertOperation,
+    scan_op: ScanOperation,
+    update_op: UpdateOperation,
+    delete_op: DeleteOperation,
+
+    // Debug utilities
+    tree_printer: TreePrinter,
 }
 
 impl Executor {
     pub fn new(storage_manager: Arc<Manager>, root_page_id: u64, max_workers: usize) -> Self {
+        let insert_op = InsertOperation::new(storage_manager.clone());
+        let scan_op = ScanOperation::new(storage_manager.clone(), max_workers, 1000);
+        let update_op = UpdateOperation::new(storage_manager.clone());
+        let delete_op = DeleteOperation::new(storage_manager.clone());
+        let tree_printer = TreePrinter::new(storage_manager.clone());
+
         Self {
             storage_manager,
             root_page_id: Arc::new(Mutex::new(root_page_id)),
             max_workers,
             batch_size: 1000,
+            insert_op,
+            scan_op,
+            update_op,
+            delete_op,
+            tree_printer,
         }
     }
 
@@ -65,8 +55,7 @@ impl Executor {
         let root_id = *self.root_page_id.lock().unwrap();
 
         // Get the leftmost leaf page (start of sequential scan)
-        let leftmost_leaf_id = self
-            .find_leftmost_leaf(root_id)
+        let leftmost_leaf_id = TreeOperations::find_leftmost_leaf(&self.storage_manager, root_id)
             .await?
             .expect("Cannot get leafmost_leaf_id");
 
@@ -103,7 +92,8 @@ impl Executor {
         let root_page = self.storage_manager.read_page(root_id).await?;
 
         // Find the appropriate leaf node for insertion
-        let leaf_page_id = self.find_leaf_for_key(row.id, &root_page).await?;
+        let leaf_page_id =
+            TreeOperations::find_leaf_for_key(&self.storage_manager, row.id, &root_page).await?;
         let leaf_page_arc = self.storage_manager.read_page(leaf_page_id).await?;
 
         // Clone the page data to make it mutable (Arc<Page> -> Page)
@@ -138,30 +128,6 @@ impl Executor {
         self.storage_manager.write_page(&leaf_page_data).await?;
 
         Ok(*self.root_page_id.lock().unwrap())
-    }
-
-    // Recursive-ly traverse until it reach find leaf for insertion, return page_id
-    async fn find_leaf_for_key(&self, key: u64, node: &Page) -> Result<u64, StorageError> {
-        // if current node already a leaf just return the page_id
-        if node.is_leaf {
-            return Ok(node.page_id);
-        }
-
-        let mut child_index = 0;
-
-        // traverse where the given key position
-        for (i, &node_key) in node.keys.iter().enumerate() {
-            if key < node_key {
-                child_index = i;
-                break;
-            }
-            child_index = i + 1;
-        }
-
-        let child_page_id = node.child_page_ids[child_index];
-        let child_node = self.storage_manager.read_page(child_page_id).await?;
-
-        Box::pin(self.find_leaf_for_key(key, &child_node)).await
     }
 
     // Split a leaf node, will return promoted key, split leaf to two-node and create a new root
@@ -332,13 +298,12 @@ impl Executor {
 
     pub async fn destroy() {}
 
-    // Utility function to get tree height (for debugging)
-    pub async fn get_tree_height(&self) -> Result<usize, StorageError> {
+    pub async fn debug_print_tree(&self) -> Result<(), StorageError> {
         let root_id = *self.root_page_id.lock().unwrap();
-        self.calculate_height(root_id).await
+        self.tree_printer.print_tree(root_id).await
     }
 
-    async fn calculate_height(&self, page_id: u64) -> Result<usize, StorageError> {
+    pub async fn calculate_height(&self, page_id: u64) -> Result<usize, StorageError> {
         let page = self.storage_manager.read_page(page_id).await?;
         if page.is_leaf {
             Ok(1)
@@ -347,120 +312,6 @@ impl Executor {
             Ok(child_height + 1)
         } else {
             Ok(1)
-        }
-    }
-
-    // Debug function to print tree structure
-    pub async fn debug_print_tree(&self) -> Result<(), StorageError> {
-        let root_id = *self.root_page_id.lock().unwrap();
-        println!("\n┌─────────────────────────────────────────────────────────────┐");
-        println!("│                        B+ Tree Structure                    │");
-        println!("└─────────────────────────────────────────────────────────────┘");
-        self.print_subtree(root_id, 0, true, String::new()).await?;
-
-        // Print leaf level connections
-        println!("\nLeaf Level Connections:");
-        self.print_leaf_connections(root_id).await?;
-        Ok(())
-    }
-
-    async fn print_subtree(
-        &self,
-        page_id: u64,
-        depth: usize,
-        is_last: bool,
-        prefix: String,
-    ) -> Result<(), StorageError> {
-        let page = self.storage_manager.read_page(page_id).await?;
-
-        // Print current node
-        let connector = if depth == 0 {
-            "ROOT"
-        } else if is_last {
-            "└── "
-        } else {
-            "├── "
-        };
-
-        let node_type = if page.is_leaf { " LEAF" } else { " INTERNAL" };
-        let keys_str = page
-            .keys
-            .iter()
-            .map(|k| k.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        println!(
-            "{}{}{} [{}] │ {} │",
-            prefix, connector, node_type, page_id, keys_str
-        );
-
-        // Print children for internal nodes
-        if !page.is_leaf {
-            let new_prefix = if depth == 0 {
-                String::new()
-            } else if is_last {
-                format!("{}    ", prefix)
-            } else {
-                format!("{}│   ", prefix)
-            };
-
-            for (i, &child_id) in page.child_page_ids.iter().enumerate() {
-                let is_last_child = i == page.child_page_ids.len() - 1;
-                Box::pin(self.print_subtree(
-                    child_id,
-                    depth + 1,
-                    is_last_child,
-                    new_prefix.clone(),
-                ))
-                .await?;
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn print_leaf_connections(&self, page_id: u64) -> Result<(), StorageError> {
-        let mut current_leaf = self.find_leftmost_leaf(page_id).await?;
-        let mut leaf_chain = Vec::new();
-
-        // Collect all leaf pages in order
-        while let Some(leaf_id) = current_leaf {
-            let page = self.storage_manager.read_page(leaf_id).await?;
-            leaf_chain.push((leaf_id, page.keys.clone()));
-            current_leaf = page.next_leaf_page_id;
-        }
-
-        // Print the leaf chain
-        if !leaf_chain.is_empty() {
-            print!("🍃 ");
-            for (i, (page_id, keys)) in leaf_chain.iter().enumerate() {
-                let keys_str = keys
-                    .iter()
-                    .map(|k| k.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",");
-                print!("[{}:{}]", page_id, keys_str);
-
-                if i < leaf_chain.len() - 1 {
-                    print!(" → ");
-                }
-            }
-            println!(" → NULL");
-        }
-
-        Ok(())
-    }
-
-    async fn find_leftmost_leaf(&self, page_id: u64) -> Result<Option<u64>, StorageError> {
-        let page = self.storage_manager.read_page(page_id).await?;
-
-        if page.is_leaf {
-            Ok(Some(page_id))
-        } else if !page.child_page_ids.is_empty() {
-            Box::pin(self.find_leftmost_leaf(page.child_page_ids[0])).await
-        } else {
-            Ok(None)
         }
     }
 }
