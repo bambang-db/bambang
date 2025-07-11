@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
 use bindereh::{
-    executor::Executor, manager::Manager, operator::scan::ScanOptions, page::{Page, Row}, value::Value
+    executor::Executor,
+    manager::Manager,
+    operator::scan::ScanOptions,
+    page::{Page, Row},
+    value::Value,
 };
 
 #[tokio::main]
@@ -39,21 +43,15 @@ async fn main() {
         };
 
         // Get the root page ID after insertion (it might change due to splits)
-        let new_root_id = executor.insert(row).await.unwrap();
+        let new_root_page_id = executor.insert(row).await.unwrap();
 
-        if new_root_id != current_root_page_id {
-            println!(
-                "Root page ID changed from {} to {} after inserting row {}",
-                current_root_page_id, new_root_id, i
-            );
-            current_root_page_id = new_root_id;
-
+        if new_root_page_id != current_root_page_id {
             // Here you would update your catalog with the new root_page_id
+            current_root_page_id = new_root_page_id;
         }
     }
 
     // Read the final root page
-    executor.debug_print_tree().await.unwrap();
-
-    // executor.scan(ScanOptions::default()).await.unwrap();
+    // executor.debug_print_tree().await.unwrap();
+    executor.scan(ScanOptions::default()).await.unwrap();
 }

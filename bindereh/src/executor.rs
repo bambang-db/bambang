@@ -53,36 +53,8 @@ impl Executor {
 
     pub async fn scan(&self, options: ScanOptions) -> Result<ScanResult, StorageError> {
         let root_id = *self.root_page_id.lock().unwrap();
-
-        // Get the leftmost leaf page (start of sequential scan)
-        let leftmost_leaf_id = TreeOperations::find_leftmost_leaf(&self.storage_manager, root_id)
-            .await?
-            .expect("Cannot get leafmost_leaf_id");
-
-        if options.parallel && self.max_workers > 1 {
-            self.parallel_scan(leftmost_leaf_id, options).await
-        } else {
-            self.sequential_scan(leftmost_leaf_id, options).await
-        }
+        self.scan_op.execute(root_id, options).await
     }
-
-    async fn sequential_scan(
-        &self,
-        start_leaf_id: u64,
-        options: ScanOptions,
-    ) -> Result<ScanResult, StorageError> {
-        todo!()
-    }
-
-    async fn parallel_scan(
-        &self,
-        start_leaf_id: u64,
-        options: ScanOptions,
-    ) -> Result<ScanResult, StorageError> {
-        todo!()
-    }
-
-    pub async fn parallel() {}
 
     pub async fn insert(&self, row: Row) -> Result<u64, StorageError> {
         // Get current root id
