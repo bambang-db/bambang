@@ -1,28 +1,40 @@
 use sqlparser::{dialect::Dialect, parser::Parser};
 
-use crate::common::SQLParserError;
+use crate::{common::LogicalPlanError, plan_builder::PlanBuilder};
 
 pub struct SQLParser {
     dialect: Box<dyn Dialect>,
+    builder: PlanBuilder,
 }
 
 impl SQLParser {
     pub fn new(dialect: Box<dyn Dialect>) -> Self {
-        Self { dialect: dialect }
+        Self {
+            dialect: dialect,
+            builder: PlanBuilder::new(),
+        }
     }
 
-    pub fn parse(&self, sql: &str) -> Result<(), SQLParserError> {
-        let ast = Parser::parse_sql(self.dialect.as_ref(), sql).unwrap();
+    pub fn parse(&mut self, sql: &str) -> Result<(), LogicalPlanError> {
+        let statements = Parser::parse_sql(self.dialect.as_ref(), sql)?;
 
-        if ast.is_empty() {
-            return Err(SQLParserError::InvalidStatement(
-                "Statements Not Found".to_string(),
+        if statements.is_empty() {
+            return Err(LogicalPlanError::SqlParseError(
+                "No statements found".to_string(),
             ));
         }
 
-        let stmt = ast[0].clone();
+        if statements.len() > 1 {
+            return Err(LogicalPlanError::UnsupportedOperation(
+                "Multiple statements not supported".to_string(),
+            ));
+        }
 
-        println!("{:#?}", stmt);
+        let stmt = &statements[0];
+        let plan = self
+            .builder
+            .generate(stmt)
+            .expect("Logical plan generation fail");
 
         Ok(())
     }

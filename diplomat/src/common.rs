@@ -1,30 +1,37 @@
-#[derive(Debug)]
-pub enum SQLParserError {
-    InvalidSyntax(String),
-    UnexpectedToken(String),
-    UnexpectedEof,
-    InvalidLiteral(String),
-    UnsupportedFeature(String),
+use thiserror::Error;
+
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum LogicalPlanError {
+    #[error("SQL parsing error: {0}")]
+    SqlParseError(String),
+
+    #[error("Schema error: {0}")]
+    SchemaError(String),
+
+    #[error("Type mismatch: expected {expected}, found {found}")]
+    TypeMismatch { expected: String, found: String },
+
+    #[error("Column not found: {0}")]
+    ColumnNotFound(String),
+
+    #[error("Table not found: {0}")]
+    TableNotFound(String),
+
+    #[error("Invalid expression: {0}")]
     InvalidExpression(String),
-    InvalidStatement(String),
+
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
+
+    #[error("Plan validation error: {0}")]
+    ValidationError(String),
+
+    #[error("Internal error: {0}")]
     InternalError(String),
 }
 
-impl std::fmt::Display for SQLParserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SQLParserError::InvalidSyntax(msg) => write!(f, "Invalid syntax: {}", msg),
-            SQLParserError::UnexpectedToken(token) => write!(f, "Unexpected token: {}", token),
-            SQLParserError::UnexpectedEof => write!(f, "Unexpected end of input"),
-            SQLParserError::InvalidLiteral(lit) => write!(f, "Invalid literal: {}", lit),
-            SQLParserError::UnsupportedFeature(feature) => {
-                write!(f, "Unsupported feature: {}", feature)
-            }
-            SQLParserError::InvalidExpression(expr) => write!(f, "Invalid expression: {}", expr),
-            SQLParserError::InvalidStatement(stmt) => write!(f, "Invalid statement: {}", stmt),
-            SQLParserError::InternalError(msg) => write!(f, "Internal error: {}", msg),
-        }
+impl From<sqlparser::parser::ParserError> for LogicalPlanError {
+    fn from(err: sqlparser::parser::ParserError) -> Self {
+        LogicalPlanError::SqlParseError(err.to_string())
     }
 }
-
-impl std::error::Error for SQLParserError {}

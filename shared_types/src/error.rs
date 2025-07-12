@@ -1,5 +1,3 @@
-//! Error types and constants shared across modules
-
 #[derive(Debug)]
 pub enum StorageError {
     CorruptedData(String),

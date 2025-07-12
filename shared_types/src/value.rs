@@ -1,9 +1,11 @@
 //! Value types for database storage
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::StorageError;
 use std::convert::TryInto;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Value {
     Integer(i64),
     String(String),
