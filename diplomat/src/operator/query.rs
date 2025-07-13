@@ -275,10 +275,13 @@ impl QueryPlan {
 
         let join_type = match join.join_operator {
             JoinOperator::Inner(_) => JoinType::Inner,
+            JoinOperator::Left(_) => JoinType::Left,
             JoinOperator::LeftOuter(_) => JoinType::Left,
+            JoinOperator::Right(_) => JoinType::Left,
             JoinOperator::RightOuter(_) => JoinType::Right,
             JoinOperator::FullOuter(_) => JoinType::Full,
             JoinOperator::CrossJoin => JoinType::Cross,
+            JoinOperator::Join(_) => JoinType::Inner,
             _ => {
                 return Err(LogicalPlanError::UnsupportedOperation(format!(
                     "Unsupported join type: {:?}",

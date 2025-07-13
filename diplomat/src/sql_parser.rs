@@ -1,6 +1,6 @@
 use sqlparser::{dialect::Dialect, parser::Parser};
 
-use crate::{common::LogicalPlanError, plan_builder::PlanBuilder};
+use crate::{common::LogicalPlanError, logical_plan::LogicalPlan, plan_builder::PlanBuilder};
 
 pub struct SQLParser {
     dialect: Box<dyn Dialect>,
@@ -15,7 +15,7 @@ impl SQLParser {
         }
     }
 
-    pub fn parse(&mut self, sql: &str) -> Result<(), LogicalPlanError> {
+    pub fn parse(&mut self, sql: &str) -> Result<LogicalPlan, LogicalPlanError> {
         let statements = Parser::parse_sql(self.dialect.as_ref(), sql)?;
 
         if statements.is_empty() {
@@ -36,6 +36,6 @@ impl SQLParser {
             .generate(stmt)
             .expect("Logical plan generation fail");
 
-        Ok(())
+        Ok(plan)
     }
 }

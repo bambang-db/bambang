@@ -3,118 +3,76 @@ use serde::{Deserialize, Serialize};
 use shared_types::{DataType, Value};
 use std::fmt;
 
-/// Represents an expression in a logical plan
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expression {
-    /// A literal value
     Literal(Value),
-
-    /// A column reference
     Column(ColumnRef),
-
-    /// Binary operation
     BinaryOp {
         left: Box<Expression>,
         op: BinaryOperator,
         right: Box<Expression>,
     },
-
-    /// Unary operation
     UnaryOp {
         op: UnaryOperator,
         expr: Box<Expression>,
     },
-
-    /// Function call
     Function { name: String, args: Vec<Expression> },
-
-    /// Aggregate function
     Aggregate {
         func: AggregateFunction,
         expr: Option<Box<Expression>>,
         distinct: bool,
     },
-
-    /// CASE expression
     Case {
         expr: Option<Box<Expression>>,
         when_clauses: Vec<(Expression, Expression)>,
         else_clause: Option<Box<Expression>>,
     },
-
-    /// CAST expression
     Cast {
         expr: Box<Expression>,
         data_type: DataType,
     },
-
-    /// IS NULL expression
     IsNull(Box<Expression>),
-
-    /// IS NOT NULL expression
     IsNotNull(Box<Expression>),
-
-    /// IN expression
     In {
         expr: Box<Expression>,
         list: Vec<Expression>,
         negated: bool,
     },
-
-    /// BETWEEN expression
     Between {
         expr: Box<Expression>,
         low: Box<Expression>,
         high: Box<Expression>,
         negated: bool,
     },
-
-    /// LIKE expression
     Like {
         expr: Box<Expression>,
         pattern: Box<Expression>,
         negated: bool,
         case_insensitive: bool,
     },
-
-    /// Wildcard expression (*)
     Wildcard { table: Option<String> },
-
-    /// Alias expression
     Alias { expr: Box<Expression>, name: String },
-
-    /// Subquery expression
     Subquery {
         subquery: Box<crate::logical_plan::LogicalPlan>,
     },
 }
 
-/// Binary operators
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BinaryOperator {
-    // Arithmetic
     Plus,
     Minus,
     Multiply,
     Divide,
     Modulo,
-
-    // Comparison
     Eq,
     NotEq,
     Lt,
     LtEq,
     Gt,
     GtEq,
-
-    // Logical
     And,
     Or,
-
-    // String
     StringConcat,
-
-    // Bitwise
     BitwiseAnd,
     BitwiseOr,
     BitwiseXor,
@@ -122,7 +80,6 @@ pub enum BinaryOperator {
     BitwiseShiftRight,
 }
 
-/// Unary operators
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnaryOperator {
     Plus,
@@ -131,7 +88,6 @@ pub enum UnaryOperator {
     BitwiseNot,
 }
 
-/// Expression type information
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExpressionType {
     pub data_type: DataType,
@@ -145,33 +101,24 @@ impl ExpressionType {
             nullable,
         }
     }
-
     pub fn not_null(data_type: DataType) -> Self {
         Self::new(data_type, false)
     }
-
     pub fn nullable(data_type: DataType) -> Self {
         Self::new(data_type, true)
     }
 }
 
 impl Expression {
-    /// Create a literal expression
     pub fn literal(value: Value) -> Self {
         Expression::Literal(value)
     }
-
-    /// Create a column reference expression
     pub fn column(name: impl Into<String>) -> Self {
         Expression::Column(ColumnRef::new(name))
     }
-
-    /// Create a qualified column reference expression
     pub fn qualified_column(table: impl Into<String>, name: impl Into<String>) -> Self {
         Expression::Column(ColumnRef::with_table(table, name))
     }
-
-    /// Create a binary operation expression
     pub fn binary_op(left: Expression, op: BinaryOperator, right: Expression) -> Self {
         Expression::BinaryOp {
             left: Box::new(left),
@@ -179,32 +126,24 @@ impl Expression {
             right: Box::new(right),
         }
     }
-
-    /// Create a unary operation expression
     pub fn unary_op(op: UnaryOperator, expr: Expression) -> Self {
         Expression::UnaryOp {
             op,
             expr: Box::new(expr),
         }
     }
-
-    /// Create an alias expression
     pub fn alias(expr: Expression, name: impl Into<String>) -> Self {
         Expression::Alias {
             expr: Box::new(expr),
             name: name.into(),
         }
     }
-
-    /// Create a function call expression
     pub fn function(name: impl Into<String>, args: Vec<Expression>) -> Self {
         Expression::Function {
             name: name.into(),
             args,
         }
     }
-
-    /// Create an aggregate function expression
     pub fn aggregate(func: AggregateFunction, expr: Option<Expression>, distinct: bool) -> Self {
         Expression::Aggregate {
             func,
@@ -212,26 +151,18 @@ impl Expression {
             distinct,
         }
     }
-
-    /// Create a CAST expression
     pub fn cast(expr: Expression, data_type: DataType) -> Self {
         Expression::Cast {
             expr: Box::new(expr),
             data_type,
         }
     }
-
-    /// Create an IS NULL expression
     pub fn is_null(expr: Expression) -> Self {
         Expression::IsNull(Box::new(expr))
     }
-
-    /// Create an IS NOT NULL expression
     pub fn is_not_null(expr: Expression) -> Self {
         Expression::IsNotNull(Box::new(expr))
     }
-
-    /// Create an IN expression
     pub fn in_list(expr: Expression, list: Vec<Expression>, negated: bool) -> Self {
         Expression::In {
             expr: Box::new(expr),
@@ -239,8 +170,6 @@ impl Expression {
             negated,
         }
     }
-
-    /// Create a BETWEEN expression
     pub fn between(expr: Expression, low: Expression, high: Expression, negated: bool) -> Self {
         Expression::Between {
             expr: Box::new(expr),
@@ -249,8 +178,6 @@ impl Expression {
             negated,
         }
     }
-
-    /// Create a LIKE expression
     pub fn like(
         expr: Expression,
         pattern: Expression,
@@ -264,26 +191,19 @@ impl Expression {
             case_insensitive,
         }
     }
-
-    /// Create a wildcard expression
     pub fn wildcard() -> Self {
         Expression::Wildcard { table: None }
     }
-
-    /// Create a qualified wildcard expression
     pub fn qualified_wildcard(table: impl Into<String>) -> Self {
         Expression::Wildcard {
             table: Some(table.into()),
         }
     }
-
-    /// Get all column references in this expression
     pub fn column_refs(&self) -> Vec<&ColumnRef> {
         let mut refs = Vec::new();
         self.collect_column_refs(&mut refs);
         refs
     }
-
     fn collect_column_refs<'a>(&'a self, refs: &mut Vec<&'a ColumnRef>) {
         match self {
             Expression::Column(col_ref) => refs.push(col_ref),
@@ -341,15 +261,11 @@ impl Expression {
             }
             Expression::Alias { expr, .. } => expr.collect_column_refs(refs),
             Expression::Subquery { .. } => {
-                // Subqueries are handled separately
             }
             Expression::Literal(_) | Expression::Wildcard { .. } => {
-                // No column references
             }
         }
     }
-
-    /// Check if this expression is deterministic (always returns the same result for the same input)
     pub fn is_deterministic(&self) -> bool {
         match self {
             Expression::Literal(_) | Expression::Column(_) | Expression::Wildcard { .. } => true,
@@ -358,13 +274,11 @@ impl Expression {
             }
             Expression::UnaryOp { expr, .. } => expr.is_deterministic(),
             Expression::Function { name, args } => {
-                // Most functions are deterministic, but some like RANDOM(), NOW() are not
                 let non_deterministic_functions =
                     ["random", "rand", "now", "current_timestamp", "uuid"];
                 let is_non_deterministic = non_deterministic_functions
                     .iter()
                     .any(|&f| name.to_lowercase() == f);
-
                 !is_non_deterministic && args.iter().all(|arg| arg.is_deterministic())
             }
             Expression::Aggregate { expr, .. } => {
@@ -395,7 +309,6 @@ impl Expression {
             }
             Expression::Alias { expr, .. } => expr.is_deterministic(),
             Expression::Subquery { .. } => {
-                // Subqueries can be deterministic, but we conservatively return false
                 false
             }
         }

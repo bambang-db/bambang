@@ -294,12 +294,6 @@ pub fn expr_to_logical_expr(expr: &Expr) -> Result<Expression, LogicalPlanError>
             let table_name = object_name_to_string(object_name);
             Ok(Expression::qualified_wildcard(table_name))
         }
-        // Expr::Subquery(query) => {
-        //     let subquery_plan = query_to_plan(query)?;
-        //     Ok(Expression::Subquery {
-        //         subquery: Box::new(subquery_plan),
-        //     })
-        // }
         _ => Err(LogicalPlanError::UnsupportedOperation(format!(
             "Unsupported expression: {:?}",
             expr

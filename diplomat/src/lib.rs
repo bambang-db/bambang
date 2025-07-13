@@ -1,8 +1,9 @@
 pub mod common;
 pub mod expression;
 pub mod logical_plan;
+pub mod operator;
+pub mod optimizer;
 pub mod plan_builder;
 pub mod sql_parser;
 pub mod types;
 pub mod utils;
-pub mod operator;
