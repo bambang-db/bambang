@@ -1,12 +1,15 @@
 use shared_types::{DataType, Value};
 use sqlparser::ast::{
-    BinaryOperator as SqlBinaryOperator, DataType as SqlDataType, Expr, ObjectName, SelectItem,
-    UnaryOperator as SqlUnaryOperator, Value as SqlValue,
+    BinaryOperator as SqlBinaryOperator, DataType as SqlDataType, Expr, Function, FunctionArg,
+    FunctionArgExpr, FunctionArguments, ObjectName, SelectItem, UnaryOperator as SqlUnaryOperator,
+    Value as SqlValue, Values,
 };
 
 use crate::{
     common::LogicalPlanError,
-    expression::{BinaryOperator, UnaryOperator},
+    expression::{BinaryOperator, Expression, UnaryOperator},
+    logical_plan::{LogicalPlan, ValuesNode},
+    types::{AggregateFunction, ColumnDef, LogicalSchema},
 };
 
 /// Convert object name to string
@@ -121,7 +124,9 @@ pub fn sql_unary_op_to_unary_op(op: &SqlUnaryOperator) -> Result<UnaryOperator, 
 }
 
 /// Convert SQL binary operator to logical binary operator
-pub fn sql_binary_op_to_binary_op(op: &SqlBinaryOperator) -> Result<BinaryOperator, LogicalPlanError> {
+pub fn sql_binary_op_to_binary_op(
+    op: &SqlBinaryOperator,
+) -> Result<BinaryOperator, LogicalPlanError> {
     match op {
         SqlBinaryOperator::Plus => Ok(BinaryOperator::Plus),
         SqlBinaryOperator::Minus => Ok(BinaryOperator::Minus),
@@ -145,4 +150,276 @@ pub fn sql_binary_op_to_binary_op(op: &SqlBinaryOperator) -> Result<BinaryOperat
             op
         ))),
     }
+}
+
+/// Convert SQL expression to logical expression
+pub fn expr_to_logical_expr(expr: &Expr) -> Result<Expression, LogicalPlanError> {
+    match expr {
+        Expr::Identifier(ident) => Ok(Expression::column(&ident.value)),
+        Expr::CompoundIdentifier(idents) => {
+            if idents.len() == 2 {
+                Ok(Expression::qualified_column(
+                    &idents[0].value,
+                    &idents[1].value,
+                ))
+            } else {
+                Err(LogicalPlanError::UnsupportedOperation(
+                    "Complex identifiers not supported".to_string(),
+                ))
+            }
+        }
+        Expr::Value(value) => {
+            let logical_value = sql_value_to_value(&value.value)?;
+            Ok(Expression::literal(logical_value))
+        }
+        Expr::BinaryOp { left, op, right } => {
+            let left_expr = expr_to_logical_expr(left)?;
+            let right_expr = expr_to_logical_expr(right)?;
+            let logical_op = sql_binary_op_to_binary_op(op)?;
+            Ok(Expression::binary_op(left_expr, logical_op, right_expr))
+        }
+        Expr::UnaryOp { op, expr } => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            let logical_op = sql_unary_op_to_unary_op(op)?;
+            Ok(Expression::unary_op(logical_op, logical_expr))
+        }
+        Expr::Function(function) => function_to_logical_expr(function),
+        Expr::Cast {
+            expr, data_type, ..
+        } => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            let logical_data_type = sql_data_type_to_data_type(data_type)?;
+            Ok(Expression::cast(logical_expr, logical_data_type))
+        }
+        Expr::IsNull(expr) => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            Ok(Expression::is_null(logical_expr))
+        }
+        Expr::IsNotNull(expr) => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            Ok(Expression::is_not_null(logical_expr))
+        }
+        Expr::InList {
+            expr,
+            list,
+            negated,
+        } => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            let mut logical_list = Vec::new();
+            for item in list {
+                logical_list.push(expr_to_logical_expr(item)?);
+            }
+            Ok(Expression::in_list(logical_expr, logical_list, *negated))
+        }
+        Expr::Between {
+            expr,
+            negated,
+            low,
+            high,
+        } => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            let logical_low = expr_to_logical_expr(low)?;
+            let logical_high = expr_to_logical_expr(high)?;
+            Ok(Expression::between(
+                logical_expr,
+                logical_low,
+                logical_high,
+                *negated,
+            ))
+        }
+        Expr::Like {
+            negated,
+            expr,
+            pattern,
+            ..
+        } => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            let logical_pattern = expr_to_logical_expr(pattern)?;
+            Ok(Expression::like(
+                logical_expr,
+                logical_pattern,
+                *negated,
+                false,
+            ))
+        }
+        Expr::ILike {
+            negated,
+            expr,
+            pattern,
+            ..
+        } => {
+            let logical_expr = expr_to_logical_expr(expr)?;
+            let logical_pattern = expr_to_logical_expr(pattern)?;
+            Ok(Expression::like(
+                logical_expr,
+                logical_pattern,
+                *negated,
+                true,
+            ))
+        }
+        Expr::Case {
+            case_token,
+            end_token,
+            operand,
+            conditions,
+            else_result,
+        } => {
+            let operand_expr = if let Some(operand) = operand {
+                Some(Box::new(expr_to_logical_expr(operand)?))
+            } else {
+                None
+            };
+
+            let mut when_clauses = Vec::new();
+            for (condition, result) in conditions.iter().zip(else_result.iter()) {
+                let when_expr = expr_to_logical_expr(&condition.condition)?;
+                let then_expr = expr_to_logical_expr(result)?;
+                when_clauses.push((when_expr, then_expr));
+            }
+
+            let else_clause = if let Some(else_result) = else_result {
+                Some(Box::new(expr_to_logical_expr(else_result)?))
+            } else {
+                None
+            };
+
+            Ok(Expression::Case {
+                expr: operand_expr,
+                when_clauses,
+                else_clause,
+            })
+        }
+        Expr::Wildcard(wildcard) => Ok(Expression::wildcard()),
+        Expr::QualifiedWildcard(object_name, attached) => {
+            let table_name = object_name_to_string(object_name);
+            Ok(Expression::qualified_wildcard(table_name))
+        }
+        // Expr::Subquery(query) => {
+        //     let subquery_plan = query_to_plan(query)?;
+        //     Ok(Expression::Subquery {
+        //         subquery: Box::new(subquery_plan),
+        //     })
+        // }
+        _ => Err(LogicalPlanError::UnsupportedOperation(format!(
+            "Unsupported expression: {:?}",
+            expr
+        ))),
+    }
+}
+
+/// Convert SQL function to logical expression
+pub fn function_to_logical_expr(function: &Function) -> Result<Expression, LogicalPlanError> {
+    let function_name = object_name_to_string(&function.name);
+
+    // Check if it's an aggregate function
+    let aggregate_func = match function_name.to_lowercase().as_str() {
+        "count" => Some(AggregateFunction::Count),
+        "sum" => Some(AggregateFunction::Sum),
+        "avg" => Some(AggregateFunction::Avg),
+        "min" => Some(AggregateFunction::Min),
+        "max" => Some(AggregateFunction::Max),
+        _ => None,
+    };
+
+    if let Some(agg_func) = aggregate_func {
+        // let distinct = function.distinct.is_some();
+        let expr = match &function.args {
+            FunctionArguments::None => None,
+            FunctionArguments::Subquery(_) => {
+                return Err(LogicalPlanError::UnsupportedOperation(
+                    "Subquery function arguments not supported".to_string(),
+                ));
+            }
+            FunctionArguments::List(args) => {
+                if args.args.is_empty() {
+                    None
+                } else {
+                    let arg = match &args.args[0] {
+                        FunctionArg::Named { .. } => {
+                            return Err(LogicalPlanError::UnsupportedOperation(
+                                "Named function arguments not supported".to_string(),
+                            ));
+                        }
+                        FunctionArg::Unnamed(FunctionArgExpr::Expr(expr)) => expr,
+                        FunctionArg::Unnamed(FunctionArgExpr::Wildcard) => {
+                            return Ok(Expression::aggregate(agg_func, None, false));
+                        }
+                        _ => {
+                            return Err(LogicalPlanError::UnsupportedOperation(
+                                "Unsupported function argument".to_string(),
+                            ));
+                        }
+                    };
+                    Some(expr_to_logical_expr(arg)?)
+                }
+            }
+        };
+
+        Ok(Expression::aggregate(agg_func, expr, false))
+    } else {
+        // Regular function
+        let mut args = Vec::new();
+        match &function.args {
+            FunctionArguments::None => {}
+            FunctionArguments::Subquery(_) => {
+                return Err(LogicalPlanError::UnsupportedOperation(
+                    "Subquery function arguments not supported".to_string(),
+                ));
+            }
+            FunctionArguments::List(arg_list) => {
+                for arg in &arg_list.args {
+                    match arg {
+                        FunctionArg::Named { .. } => {
+                            return Err(LogicalPlanError::UnsupportedOperation(
+                                "Named function arguments not supported".to_string(),
+                            ));
+                        }
+                        FunctionArg::Unnamed(FunctionArgExpr::Expr(expr)) => {
+                            args.push(expr_to_logical_expr(expr)?);
+                        }
+                        FunctionArg::Unnamed(FunctionArgExpr::Wildcard) => {
+                            args.push(Expression::wildcard());
+                        }
+                        _ => {
+                            return Err(LogicalPlanError::UnsupportedOperation(
+                                "Unsupported function argument".to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Expression::function(function_name, args))
+    }
+}
+
+/// Convert VALUES clause to a logical plan
+pub fn values_to_plan(values: &Values) -> Result<LogicalPlan, LogicalPlanError> {
+    let mut value_rows = Vec::new();
+
+    for row in &values.rows {
+        let mut value_row = Vec::new();
+        for expr in row {
+            value_row.push(expr_to_logical_expr(expr)?);
+        }
+        value_rows.push(value_row);
+    }
+
+    // Infer schema from first row
+    let schema = if let Some(first_row) = value_rows.first() {
+        let mut columns = Vec::new();
+        for (i, _) in first_row.iter().enumerate() {
+            columns.push(ColumnDef::new(format!("column_{}", i), DataType::String));
+        }
+        LogicalSchema::new(columns)
+    } else {
+        LogicalSchema::empty()
+    };
+
+    Ok(LogicalPlan::Values(ValuesNode {
+        values: value_rows,
+        schema,
+        statistics: crate::types::PlanStatistics::with_row_count(values.rows.len()),
+    }))
 }

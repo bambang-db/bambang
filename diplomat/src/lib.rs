@@ -5,4 +5,4 @@ pub mod plan_builder;
 pub mod sql_parser;
 pub mod types;
 pub mod utils;
-
+pub mod operator;
