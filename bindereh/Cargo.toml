@@ -6,4 +6,8 @@ edition = "2024"
 [dependencies]
 byteorder = "1.5.0"
 regex = "1.11.1"
+tokio = { version = "1.46.1", features = ["full"] }
 shared_types = { path = "../shared_types" }
+
+[dev-dependencies]
+tempfile = "3.8"

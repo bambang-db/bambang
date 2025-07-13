@@ -27,7 +27,7 @@ pub struct Executor {
 impl Executor {
     pub fn new(storage_manager: Arc<Manager>, root_page_id: u64, max_workers: usize) -> Self {
         let insert_op = InsertOperation::new(storage_manager.clone());
-        let scan_op = ScanOperation::new(storage_manager.clone(), max_workers, 1000);
+        let scan_op = ScanOperation::new(storage_manager.clone(), max_workers);
         let update_op = UpdateOperation::new(storage_manager.clone());
         let delete_op = DeleteOperation::new(storage_manager.clone());
         let tree_printer = TreePrinter::new(storage_manager.clone());

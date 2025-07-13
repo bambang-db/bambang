@@ -94,7 +94,7 @@ impl Default for ScanOptions {
             projection: None,
             limit: None,
             offset: None,
-            parallel: true,
+            parallel: false,
             order_by: None,
             schema: None,
         }

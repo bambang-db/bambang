@@ -5,16 +5,20 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use byteorder::ReadBytesExt;
+
 use crate::{
     common::{PAGE_SIZE, StorageError},
     page::Page,
     pool::Pool,
+    leaf_registry::LeafPageRegistry,
 };
 
 pub struct Manager {
     file: Arc<Mutex<File>>,
     buffer_pool: Pool,
     next_page_id: Arc<Mutex<u64>>,
+    leaf_registry: Arc<LeafPageRegistry>,
 }
 
 impl Manager {
@@ -25,10 +29,15 @@ impl Manager {
             .write(true)
             .open(&file_path)?;
 
+        // Create registry file path by appending .registry to the main file path
+        let registry_path = format!("{}.registry", file_path.as_ref().to_string_lossy());
+        let leaf_registry = Arc::new(LeafPageRegistry::new(registry_path)?);
+
         Ok(Self {
             file: Arc::new(Mutex::new(file)),
             buffer_pool: Pool::new(buffer_size),
             next_page_id: Arc::new(Mutex::new(1)), // Start from page 1 (0 reserved for metadata)
+            leaf_registry,
         })
     }
 
@@ -52,6 +61,43 @@ impl Manager {
         self.buffer_pool.put_page(page_id, node_arc.clone());
 
         Ok(node_arc)
+    }
+
+    /// Read only the page header metadata without loading the entire page
+    /// Returns (page_id, is_leaf, next_leaf_page_id) for efficient page traversal
+    pub async fn read_page_header(&self, page_id: u64) -> Result<(u64, bool, Option<u64>), StorageError> {
+        let mut file = self.file.lock().unwrap();
+        file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64))?;
+
+        // Read only the header portion (first 37 bytes: magic(4) + page_id(8) + is_leaf(1) + parent_page_id(8) + next_leaf_page_id(8) + keys_len(4) + padding(4))
+        let mut buffer = vec![0u8; 37];
+        file.read_exact(&mut buffer)?;
+
+        let mut reader = std::io::Cursor::new(&buffer);
+        
+        // Read magic number
+        let magic = reader.read_u32::<byteorder::LittleEndian>()
+            .map_err(|_| StorageError::CorruptedData("Failed to read magic number".into()))?;
+        if magic != crate::common::MAGIC_NUMBER {
+            return Err(StorageError::CorruptedData("Invalid magic number".into()));
+        }
+
+        // Read page metadata
+        let actual_page_id = reader.read_u64::<byteorder::LittleEndian>()
+            .map_err(|_| StorageError::CorruptedData("Failed to read page_id".into()))?;
+        
+        let is_leaf = reader.read_u8()
+            .map_err(|_| StorageError::CorruptedData("Failed to read is_leaf".into()))? == 1;
+        
+        // Skip parent_page_id (8 bytes)
+        reader.set_position(reader.position() + 8);
+        
+        let next_leaf_raw = reader.read_u64::<byteorder::LittleEndian>()
+            .map_err(|_| StorageError::CorruptedData("Failed to read next_leaf_page_id".into()))?;
+        
+        let next_leaf_page_id = if next_leaf_raw == 0 { None } else { Some(next_leaf_raw) };
+
+        Ok((actual_page_id, is_leaf, next_leaf_page_id))
     }
 
     pub async fn write_page(&self, node: &Page) -> Result<(), StorageError> {
@@ -105,8 +151,9 @@ impl Manager {
         }
 
         // init the b+ tree page again from the beginning (mulai dari 0 ya kaks)
+        let root_page_id = *self.next_page_id.lock().unwrap();
         let root_node = Page {
-            page_id: *self.next_page_id.lock().unwrap(),
+            page_id: root_page_id,
             is_leaf: true,
             parent_page_id: None,
             keys: vec![],
@@ -117,7 +164,51 @@ impl Manager {
         };
 
         self.write_page(&root_node).await.unwrap();
+        
+        // Register the initial root leaf page in the registry
+        self.register_leaf_page(root_page_id).await.unwrap();
 
         Ok(())
     }
+
+    /// Get access to the leaf page registry
+    pub fn get_leaf_registry(&self) -> Arc<LeafPageRegistry> {
+        Arc::clone(&self.leaf_registry)
+    }
+
+    /// Register a new leaf page in the registry
+    pub async fn register_leaf_page(&self, page_id: u64) -> Result<(), StorageError> {
+        self.leaf_registry.add_leaf_page(page_id)
+    }
+
+    /// Unregister a leaf page from the registry
+    pub async fn unregister_leaf_page(&self, page_id: u64) -> Result<bool, StorageError> {
+        self.leaf_registry.remove_leaf_page(page_id)
+    }
+
+    /// Get all leaf page IDs for optimized parallel scanning
+    pub async fn get_all_leaf_page_ids(&self) -> Result<Vec<u64>, StorageError> {
+        self.leaf_registry.get_all_leaf_pages()
+    }
+
+    /// Get a batch of leaf page IDs for distributed processing
+    pub async fn get_leaf_page_batch(&self, start_index: usize, batch_size: usize) -> Result<Vec<u64>, StorageError> {
+        self.leaf_registry.get_leaf_page_batch(start_index, batch_size)
+    }
+
+    /// Get the total number of leaf pages
+    pub async fn get_leaf_page_count(&self) -> Result<u64, StorageError> {
+        self.leaf_registry.get_leaf_page_count()
+    }
+
+    /// Rebuild the leaf registry from the B+ tree (recovery mechanism)
+    pub async fn rebuild_leaf_registry(self: &Arc<Self>, root_page_id: u64) -> Result<(), StorageError> {
+        self.leaf_registry.rebuild_from_tree(self, root_page_id).await
+    }
+
+    /// Validate that the leaf registry is consistent with the tree
+    pub async fn validate_leaf_registry(self: &Arc<Self>, root_page_id: u64) -> Result<bool, StorageError> {
+        self.leaf_registry.validate_consistency(self, root_page_id).await
+    }
 }
+

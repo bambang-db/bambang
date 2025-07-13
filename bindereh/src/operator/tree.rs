@@ -66,6 +66,9 @@ impl TreeOperations {
 
         storage_manager.write_page(&new_node).await?;
 
+        // Register the new leaf page in the registry
+        storage_manager.register_leaf_page(new_page_id).await?;
+
         // If this is the root node, create a new root
         if node.parent_page_id.is_none() {
             let new_root_id =

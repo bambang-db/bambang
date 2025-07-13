@@ -24,21 +24,11 @@ impl AggregateProcessor {
 
         for aggregate in aggregates {
             let value = match aggregate {
-                AggregateFunction::Count => {
-                    Value::Integer(rows.len() as i64)
-                }
-                AggregateFunction::Sum { column } => {
-                    Self::sum_column(rows, column, schema)?
-                }
-                AggregateFunction::Avg { column } => {
-                    Self::avg_column(rows, column, schema)?
-                }
-                AggregateFunction::Min { column } => {
-                    Self::min_column(rows, column, schema)?
-                }
-                AggregateFunction::Max { column } => {
-                    Self::max_column(rows, column, schema)?
-                }
+                AggregateFunction::Count => Value::Integer(rows.len() as i64),
+                AggregateFunction::Sum { column } => Self::sum_column(rows, column, schema)?,
+                AggregateFunction::Avg { column } => Self::avg_column(rows, column, schema)?,
+                AggregateFunction::Min { column } => Self::min_column(rows, column, schema)?,
+                AggregateFunction::Max { column } => Self::max_column(rows, column, schema)?,
                 AggregateFunction::CountDistinct { column } => {
                     Self::count_distinct_column(rows, column, schema)?
                 }
@@ -83,7 +73,10 @@ impl AggregateProcessor {
                 Ok(Value::Integer(sum))
             }
         } else {
-            Err(StorageError::InvalidOperation(format!("Column '{}' not found", column)))
+            Err(StorageError::InvalidOperation(format!(
+                "Column '{}' not found",
+                column
+            )))
         }
     }
 
@@ -126,7 +119,10 @@ impl AggregateProcessor {
                 Ok(Value::Null)
             }
         } else {
-            Err(StorageError::InvalidOperation(format!("Column '{}' not found", column)))
+            Err(StorageError::InvalidOperation(format!(
+                "Column '{}' not found",
+                column
+            )))
         }
     }
 
@@ -140,7 +136,9 @@ impl AggregateProcessor {
                         match &min_value {
                             None => min_value = Some(value.clone()),
                             Some(current_min) => {
-                                if Self::compare_values_for_aggregate(value, current_min) == Ordering::Less {
+                                if Self::compare_values_for_aggregate(value, current_min)
+                                    == Ordering::Less
+                                {
                                     min_value = Some(value.clone());
                                 }
                             }
@@ -151,7 +149,10 @@ impl AggregateProcessor {
 
             Ok(min_value.unwrap_or(Value::Null))
         } else {
-            Err(StorageError::InvalidOperation(format!("Column '{}' not found", column)))
+            Err(StorageError::InvalidOperation(format!(
+                "Column '{}' not found",
+                column
+            )))
         }
     }
 
@@ -165,7 +166,9 @@ impl AggregateProcessor {
                         match &max_value {
                             None => max_value = Some(value.clone()),
                             Some(current_max) => {
-                                if Self::compare_values_for_aggregate(value, current_max) == Ordering::Greater {
+                                if Self::compare_values_for_aggregate(value, current_max)
+                                    == Ordering::Greater
+                                {
                                     max_value = Some(value.clone());
                                 }
                             }
@@ -176,11 +179,18 @@ impl AggregateProcessor {
 
             Ok(max_value.unwrap_or(Value::Null))
         } else {
-            Err(StorageError::InvalidOperation(format!("Column '{}' not found", column)))
+            Err(StorageError::InvalidOperation(format!(
+                "Column '{}' not found",
+                column
+            )))
         }
     }
 
-    fn count_distinct_column(rows: &[Row], column: &str, schema: &Schema) -> Result<Value, StorageError> {
+    fn count_distinct_column(
+        rows: &[Row],
+        column: &str,
+        schema: &Schema,
+    ) -> Result<Value, StorageError> {
         if let Some(col_idx) = schema.get_column_index(column) {
             let mut distinct_values = std::collections::HashSet::new();
 
@@ -192,7 +202,10 @@ impl AggregateProcessor {
 
             Ok(Value::Integer(distinct_values.len() as i64))
         } else {
-            Err(StorageError::InvalidOperation(format!("Column '{}' not found", column)))
+            Err(StorageError::InvalidOperation(format!(
+                "Column '{}' not found",
+                column
+            )))
         }
     }
 

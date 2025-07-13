@@ -5,3 +5,4 @@ pub mod pool;
 pub mod manager;
 pub mod debug;
 pub mod operator;
+pub mod leaf_registry;
