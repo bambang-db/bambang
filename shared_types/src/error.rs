@@ -5,6 +5,7 @@ pub enum StorageError {
     IoError(String),
     DuplicateKey(String),
     InvalidInput(String),
+    InvalidOperation(String),
 }
 
 impl std::fmt::Display for StorageError {
@@ -15,6 +16,7 @@ impl std::fmt::Display for StorageError {
             StorageError::IoError(msg) => write!(f, "IO error: {}", msg),
             StorageError::DuplicateKey(msg) => write!(f, "Duplicate key: {}", msg),
             StorageError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+            StorageError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
         }
     }
 }

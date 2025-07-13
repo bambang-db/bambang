@@ -1,7 +1,5 @@
 use std::sync::{Arc, Mutex};
-
-use shared_types::Row;
-
+use shared_types::{Row, ScanOptions, ScanResult};
 use crate::{
     common::StorageError,
     manager::Manager,
@@ -9,7 +7,7 @@ use crate::{
         delete::{DeleteOperation, DeleteOptions, DeleteResult},
         insert::InsertOperation,
         print::TreePrinter,
-        scan::{ScanOperation, ScanOptions, ScanResult},
+        scan::ScanOperation,
         update::UpdateOperation,
     },
 };
@@ -19,14 +17,10 @@ pub struct Executor {
     pub root_page_id: Arc<Mutex<u64>>,
     pub max_workers: usize,
     pub batch_size: usize,
-
-    // Operations
     insert_op: InsertOperation,
     scan_op: ScanOperation,
     update_op: UpdateOperation,
     delete_op: DeleteOperation,
-
-    // Debug utilities
     tree_printer: TreePrinter,
 }
 
@@ -37,7 +31,6 @@ impl Executor {
         let update_op = UpdateOperation::new(storage_manager.clone());
         let delete_op = DeleteOperation::new(storage_manager.clone());
         let tree_printer = TreePrinter::new(storage_manager.clone());
-
         Self {
             storage_manager,
             root_page_id: Arc::new(Mutex::new(root_page_id)),
@@ -58,9 +51,7 @@ impl Executor {
 
     pub async fn insert(&self, row: Row) -> Result<u64, StorageError> {
         let root_id = *self.root_page_id.lock().unwrap();
-
         let result = self.insert_op.execute(row, root_id).await?;
-
         if let Some(new_root_id) = result.new_root_id {
             *self.root_page_id.lock().unwrap() = new_root_id;
             Ok(new_root_id)
@@ -69,12 +60,9 @@ impl Executor {
         }
     }
 
-    /// Insert multiple rows in a batch operation
     pub async fn insert_batch(&self, rows: Vec<Row>) -> Result<u64, StorageError> {
         let root_id = *self.root_page_id.lock().unwrap();
-
         let result = self.insert_op.execute_batch(rows, root_id).await?;
-
         if let Some(new_root_id) = result.new_root_id {
             *self.root_page_id.lock().unwrap() = new_root_id;
             Ok(new_root_id)
@@ -90,7 +78,6 @@ impl Executor {
 
     pub async fn delete(&self, options: DeleteOptions) -> Result<(), StorageError> {
         let result = self.delete_op.execute(options).await.unwrap();
-
         match result {
             DeleteResult::Truncated => {
                 *self.root_page_id.lock().unwrap() = 1;
