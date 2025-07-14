@@ -12,7 +12,7 @@ impl TreePrinter {
     }
 
     pub async fn print_tree(&self, root_page_id: u64) -> Result<(), StorageError> {
-        println!("\n┌─────────────────────────────────────────────────────────────┐");
+        println!("┌─────────────────────────────────────────────────────────────┐");
         println!("│                        B+ Tree Structure                    │");
         println!("└─────────────────────────────────────────────────────────────┘");
         self.print_subtree(root_page_id, 0, true, String::new())
