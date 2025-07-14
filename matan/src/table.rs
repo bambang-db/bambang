@@ -1,7 +1,6 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-
-use crate::schema::Schema;
+use shared_types::Schema;
 
 // Simplified table catalog
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]

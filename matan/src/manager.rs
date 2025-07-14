@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use crate::{common::CatalogError, database::DatabaseCatalog, schema::Schema, table::TableCatalog};
+use shared_types::Schema;
+
+use crate::{common::CatalogError, database::DatabaseCatalog, table::TableCatalog};
 
 pub struct CatalogManager {
     pub catalog_file: String,

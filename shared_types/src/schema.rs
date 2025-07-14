@@ -1,9 +1,7 @@
-//! Schema types for database tables
-
-use std::collections::HashMap;
+use crate::row::Row;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use crate::row::Row;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub enum DataType {
@@ -35,7 +33,6 @@ pub struct Column {
 }
 
 impl Column {
-    /// Create a new column
     pub fn new(name: String, data_type: DataType, nullable: bool, primary_key: bool) -> Self {
         Self {
             name,
@@ -45,27 +42,23 @@ impl Column {
         }
     }
 
-    /// Create a new primary key column
     pub fn primary_key(name: String, data_type: DataType) -> Self {
         Self::new(name, data_type, false, true)
     }
 
-    /// Create a new nullable column
     pub fn nullable(name: String, data_type: DataType) -> Self {
         Self::new(name, data_type, true, false)
     }
 
-    /// Create a new non-nullable column
     pub fn not_null(name: String, data_type: DataType) -> Self {
         Self::new(name, data_type, false, false)
     }
 }
 
-// Core schema types
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Schema {
     pub columns: Vec<Column>,
-    pub column_map: HashMap<String, usize>, // Map column names to indices
+    pub column_map: HashMap<String, usize>,
 }
 
 impl Schema {
@@ -97,7 +90,7 @@ impl Schema {
             if let Some(&idx) = self.column_map.get(name) {
                 indices.push(idx);
             } else {
-                return None; // Column not found
+                return None;
             }
         }
         Some(indices)
@@ -118,22 +111,18 @@ impl Schema {
         }
     }
 
-    /// Get the number of columns in this schema
     pub fn column_count(&self) -> usize {
         self.columns.len()
     }
 
-    /// Get all column names
     pub fn column_names(&self) -> Vec<&str> {
         self.columns.iter().map(|c| c.name.as_str()).collect()
     }
 
-    /// Check if a column exists
     pub fn has_column(&self, name: &str) -> bool {
         self.column_map.contains_key(name)
     }
 
-    /// Get primary key columns
     pub fn primary_key_columns(&self) -> Vec<&Column> {
         self.columns.iter().filter(|c| c.primary_key).collect()
     }
