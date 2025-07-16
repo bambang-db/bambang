@@ -19,3 +19,5 @@ Taken from Madurese, meaning 'nobility,' this is the storage engine where the B+
 ### Matan
 
 Taken from Arabic, meaning 'notes,' this is the catalog storage where the database stores information, similar to `information_schema` and `pg_stats`.
+
+Embedded -> B+ Tree -> Parallel

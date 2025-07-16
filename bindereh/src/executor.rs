@@ -71,9 +71,8 @@ impl Executor {
         }
     }
 
-    pub async fn update(&self, key: u64, row: Row) -> Result<bool, StorageError> {
-        let root_page_id = *self.root_page_id.lock().unwrap();
-        self.update_op.execute(key, row, root_page_id).await
+    pub async fn update(&self, options: crate::operator::update::UpdateOptions) -> Result<u64, StorageError> {
+        self.update_op.execute(options).await
     }
 
     pub async fn delete(&self, options: DeleteOptions) -> Result<(), StorageError> {
