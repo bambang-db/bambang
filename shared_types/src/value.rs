@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::StorageError;
 use std::convert::TryInto;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Value {
@@ -25,6 +26,86 @@ pub enum Value {
     Text(String),   // Large text (same as String but semantic difference)
     Char(char),     // Single character
     TinyInt(i8),    // 8-bit integer
+}
+
+impl Eq for Value {}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Value::Integer(v) => {
+                0u8.hash(state);
+                v.hash(state);
+            }
+            Value::String(v) => {
+                1u8.hash(state);
+                v.hash(state);
+            }
+            Value::Float(v) => {
+                2u8.hash(state);
+                v.to_bits().hash(state);
+            }
+            Value::Boolean(v) => {
+                3u8.hash(state);
+                v.hash(state);
+            }
+            Value::Null => {
+                4u8.hash(state);
+            }
+            Value::SmallInt(v) => {
+                5u8.hash(state);
+                v.hash(state);
+            }
+            Value::BigInt(v) => {
+                6u8.hash(state);
+                v.hash(state);
+            }
+            Value::Decimal(v) => {
+                7u8.hash(state);
+                v.hash(state);
+            }
+            Value::Binary(v) => {
+                8u8.hash(state);
+                v.hash(state);
+            }
+            Value::Date(v) => {
+                9u8.hash(state);
+                v.hash(state);
+            }
+            Value::Time(v) => {
+                10u8.hash(state);
+                v.hash(state);
+            }
+            Value::Timestamp(v) => {
+                11u8.hash(state);
+                v.hash(state);
+            }
+            Value::DateTime(v) => {
+                12u8.hash(state);
+                v.hash(state);
+            }
+            Value::Json(v) => {
+                13u8.hash(state);
+                v.hash(state);
+            }
+            Value::Uuid(v) => {
+                14u8.hash(state);
+                v.hash(state);
+            }
+            Value::Text(v) => {
+                15u8.hash(state);
+                v.hash(state);
+            }
+            Value::Char(v) => {
+                16u8.hash(state);
+                v.hash(state);
+            }
+            Value::TinyInt(v) => {
+                17u8.hash(state);
+                v.hash(state);
+            }
+        }
+    }
 }
 
 // Type markers as constants for better maintainability

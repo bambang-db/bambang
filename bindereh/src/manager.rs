@@ -19,6 +19,7 @@ pub struct Manager {
     buffer_pool: Pool,
     next_page_id: Arc<Mutex<u64>>,
     leaf_registry: Arc<LeafPageRegistry>,
+    freelist: Arc<Mutex<Vec<u64>>>,
 }
 
 impl Manager {
@@ -31,6 +32,7 @@ impl Manager {
             buffer_pool: Pool::new(buffer_size),
             next_page_id: Arc::new(Mutex::new(1)),
             leaf_registry,
+            freelist: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -79,10 +81,35 @@ impl Manager {
     }
 
     pub async fn allocate_page(&self) -> u64 {
+        // First check if there are any pages in the freelist
+        {
+            let mut freelist = self.freelist.lock().unwrap();
+            if let Some(page_id) = freelist.pop() {
+                return page_id;
+            }
+        }
+        
+        // If no free pages, allocate a new one
         let mut next_id = self.next_page_id.lock().unwrap();
         let page_id = *next_id;
         *next_id += 1;
         page_id
+    }
+
+    pub async fn deallocate_page(&self, page_id: u64) -> Result<(), StorageError> {
+        // Add page to freelist for reuse
+        let mut freelist = self.freelist.lock().unwrap();
+        freelist.push(page_id);
+        
+        // Remove from buffer pool to avoid stale data
+        self.buffer_pool.remove_page(page_id);
+        
+        Ok(())
+    }
+
+    pub async fn get_freelist_size(&self) -> usize {
+        let freelist = self.freelist.lock().unwrap();
+        freelist.len()
     }
 
     pub async fn flush_dirty_pages(&self) -> Result<(), StorageError> {

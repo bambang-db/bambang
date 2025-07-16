@@ -288,8 +288,22 @@ impl TreeOperations {
         let parent = (*storage_manager.read_page(parent_id).await?).clone();
         
         // Find the position of this page in parent's children
-        let page_index = parent.child_page_ids.iter().position(|&id| id == page_id)
-            .ok_or(StorageError::CorruptedData("Page not found in parent".to_string()))?;
+        let page_index = match parent.child_page_ids.iter().position(|&id| id == page_id) {
+            Some(index) => index,
+            None => {
+                // Page not found in parent - this can happen during concurrent operations
+                // or if the page was already deallocated. Try to refresh parent and check again.
+                let fresh_parent = (*storage_manager.read_page(parent_id).await?).clone();
+                match fresh_parent.child_page_ids.iter().position(|&id| id == page_id) {
+                    Some(index) => index,
+                    None => {
+                        // Page is truly not in parent - it may have been already handled
+                        // Return None to indicate no further action needed
+                        return Ok(None);
+                    }
+                }
+            }
+        };
         
         // Try to borrow from left sibling
         if page_index > 0 {
@@ -512,7 +526,12 @@ impl TreeOperations {
         storage_manager.write_page(&parent).await?;
         
         // Deallocate the merged page
-        // Note: In a real implementation, you'd want to add this page to a free list
+        storage_manager.deallocate_page(page_id).await?;
+        
+        // Unregister from leaf registry if it's a leaf page
+        if page.is_leaf {
+            storage_manager.unregister_leaf_page(page_id).await?;
+        }
         
         // Check if parent underflows
         if parent.keys.len() < MIN_KEYS_PER_NODE && parent.parent_page_id.is_some() {
@@ -573,7 +592,12 @@ impl TreeOperations {
         storage_manager.write_page(&parent).await?;
         
         // Deallocate the merged page
-        // Note: In a real implementation, you'd want to add this page to a free list
+        storage_manager.deallocate_page(right_sibling_id).await?;
+        
+        // Unregister from leaf registry if it's a leaf page
+        if right_sibling.is_leaf {
+            storage_manager.unregister_leaf_page(right_sibling_id).await?;
+        }
         
         // Check if parent underflows
         if parent.keys.len() < MIN_KEYS_PER_NODE && parent.parent_page_id.is_some() {
@@ -600,8 +624,13 @@ impl TreeOperations {
         
         if let Some(parent_id) = page.parent_page_id {
             let parent = storage_manager.read_page(parent_id).await?;
-            let page_index = parent.child_page_ids.iter().position(|&id| id == page_id)
-                .ok_or(StorageError::CorruptedData("Page not found in parent".to_string()))?;
+            let page_index = match parent.child_page_ids.iter().position(|&id| id == page_id) {
+                Some(index) => index,
+                None => {
+                    // Page not found in parent - return no siblings
+                    return Ok((None, None));
+                }
+            };
             
             let left_sibling = if page_index > 0 {
                 Some(parent.child_page_ids[page_index - 1])
