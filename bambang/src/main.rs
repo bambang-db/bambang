@@ -481,8 +481,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Initial Memory: {} MB", initial_memory / 1024 / 1024);
 
     let setup_start = Instant::now();
-    let lineorder_manager = Arc::new(Manager::new("lineorder.db", 1024)?);
-    let dates_manager = Arc::new(Manager::new("dates.db", 1024)?);
+    // Increase buffer pool size significantly for better caching
+    // 16384 pages * 32KB = 512MB buffer pool (vs previous 32MB)
+    let lineorder_manager = Arc::new(Manager::new("lineorder.db", 16384).await?);
+    let dates_manager = Arc::new(Manager::new("dates.db", 4096).await?);
 
     let (lineorder_root, lineorder_schema) =
         setup_lineorder_table(lineorder_manager.clone()).await?;
@@ -497,8 +499,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //           AND lo_discount between 1 and 3
     //           AND lo_quantity < 25;
 
-    let scan_op_lineorder = ScanOperation::new(lineorder_manager.clone(), 4);
-    let scan_op_dates = ScanOperation::new(dates_manager.clone(), 4);
+    let scan_op_lineorder = ScanOperation::new(lineorder_manager.clone(), 2);
+    let scan_op_dates = ScanOperation::new(dates_manager.clone(), 2);
 
     let dates_scan_options = ScanOptions {
         schema: Some(dates_schema.clone()),

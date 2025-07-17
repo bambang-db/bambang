@@ -2,6 +2,62 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use regex::Regex;
 use shared_types::{OrderBy, Predicate, Row, Schema, SortDirection, Value};
+pub fn evaluate_predicate_fast(predicate: &Predicate, row: &Row, column_indices: &HashMap<String, usize>) -> bool {
+    match predicate {
+        Predicate::ColumnEquals { column, value } => {
+            if let Some(&idx) = column_indices.get(column) {
+                if let Some(row_value) = row.data.get(idx) {
+                    return row_value == value;
+                }
+            }
+            false
+        }
+        Predicate::ColumnLessThan { column, value } => {
+            if let Some(&idx) = column_indices.get(column) {
+                if let Some(row_value) = row.data.get(idx) {
+                    return match (row_value, value) {
+                        (Value::Integer(a), Value::Integer(b)) => a < b,
+                        (Value::Float(a), Value::Float(b)) => a < b,
+                        _ => false,
+                    };
+                }
+            }
+            false
+        }
+        Predicate::ColumnGreaterThanOrEqual { column, value } => {
+            if let Some(&idx) = column_indices.get(column) {
+                if let Some(row_value) = row.data.get(idx) {
+                    return match (row_value, value) {
+                        (Value::Integer(a), Value::Integer(b)) => a >= b,
+                        (Value::Float(a), Value::Float(b)) => a >= b,
+                        _ => false,
+                    };
+                }
+            }
+            false
+        }
+        Predicate::ColumnLessThanOrEqual { column, value } => {
+            if let Some(&idx) = column_indices.get(column) {
+                if let Some(row_value) = row.data.get(idx) {
+                    return match (row_value, value) {
+                        (Value::Integer(a), Value::Integer(b)) => a <= b,
+                        (Value::Float(a), Value::Float(b)) => a <= b,
+                        _ => false,
+                    };
+                }
+            }
+            false
+        }
+        Predicate::And(left, right) => {
+            evaluate_predicate_fast(left, row, column_indices) && evaluate_predicate_fast(right, row, column_indices)
+        }
+        Predicate::Or(left, right) => {
+            evaluate_predicate_fast(left, row, column_indices) || evaluate_predicate_fast(right, row, column_indices)
+        }
+        _ => false,
+    }
+}
+
 
 pub fn compare_values_static(a: &Value, b: &Value) -> std::cmp::Ordering {
     match (a, b) {

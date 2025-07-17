@@ -1,8 +1,10 @@
 use std::{
-    fs::{File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
     path::Path,
     sync::{Arc, Mutex},
+};
+use tokio::{
+    fs::{File, OpenOptions},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom},
 };
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -15,7 +17,7 @@ use crate::{
 };
 
 pub struct Manager {
-    file: Arc<Mutex<File>>,
+    file: Arc<tokio::sync::Mutex<File>>,
     buffer_pool: Pool,
     next_page_id: Arc<Mutex<u64>>,
     leaf_registry: Arc<LeafPageRegistry>,
@@ -23,12 +25,12 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new<P: AsRef<Path>>(file_path: P, buffer_size: usize) -> Result<Self, StorageError> {
-        let file = OpenOptions::new().create(true).read(true).write(true).open(&file_path)?;
+    pub async fn new<P: AsRef<Path>>(file_path: P, buffer_size: usize) -> Result<Self, StorageError> {
+        let file = OpenOptions::new().create(true).read(true).write(true).open(&file_path).await?;
         let registry_path = format!("{}.registry", file_path.as_ref().to_string_lossy());
         let leaf_registry = Arc::new(LeafPageRegistry::new(registry_path)?);
         Ok(Self {
-            file: Arc::new(Mutex::new(file)),
+            file: Arc::new(tokio::sync::Mutex::new(file)),
             buffer_pool: Pool::new(buffer_size),
             next_page_id: Arc::new(Mutex::new(1)),
             leaf_registry,
@@ -40,10 +42,10 @@ impl Manager {
         if let Some(cached_node) = self.buffer_pool.get_page(page_id) {
             return Ok(cached_node);
         }
-        let mut file = self.file.lock().unwrap();
-        file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64))?;
+        let mut file = self.file.lock().await;
+        file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64)).await?;
         let mut buffer = vec![0u8; PAGE_SIZE];
-        file.read_exact(&mut buffer)?;
+        file.read_exact(&mut buffer).await?;
         let node = Page::from_bytes(&buffer)?;
         let node_arc = Arc::new(node);
         self.buffer_pool.put_page(page_id, node_arc.clone());
@@ -51,10 +53,10 @@ impl Manager {
     }
 
     pub async fn read_page_header(&self, page_id: u64) -> Result<(u64, bool, Option<u64>), StorageError> {
-        let mut file = self.file.lock().unwrap();
-        file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64))?;
+        let mut file = self.file.lock().await;
+        file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64)).await?;
         let mut buffer = vec![0u8; 37];
-        file.read_exact(&mut buffer)?;
+        file.read_exact(&mut buffer).await?;
         let mut reader = std::io::Cursor::new(&buffer);
         let magic = ReadBytesExt::read_u32::<LittleEndian>(&mut reader).map_err(|_| StorageError::CorruptedData("Failed to read magic number".into()))?;
         if magic != crate::common::MAGIC_NUMBER {
@@ -69,11 +71,11 @@ impl Manager {
     }
 
     pub async fn write_page(&self, node: &Page) -> Result<(), StorageError> {
-        let mut file = self.file.lock().unwrap();
-        file.seek(SeekFrom::Start(node.page_id * PAGE_SIZE as u64))?;
+        let mut file = self.file.lock().await;
+        file.seek(SeekFrom::Start(node.page_id * PAGE_SIZE as u64)).await?;
         let bytes = node.to_bytes();
-        file.write_all(&bytes)?;
-        file.sync_all()?;
+        file.write_all(&bytes).await?;
+        file.sync_all().await?;
         let node_arc = Arc::new(node.clone());
         self.buffer_pool.put_page(node.page_id, node_arc);
         self.buffer_pool.clear_dirty(node.page_id);
@@ -127,9 +129,9 @@ impl Manager {
             *next_id = 1;
         }
         {
-            let file = self.file.lock().unwrap();
-            file.set_len(0)?;
-            file.sync_all()?;
+            let mut file = self.file.lock().await;
+            file.set_len(0).await?;
+            file.sync_all().await?;
         }
         let root_page_id = *self.next_page_id.lock().unwrap();
         let root_node = Page {
@@ -197,12 +199,12 @@ impl Manager {
             return Ok(pages);
         }
         uncached_ids.sort_unstable();
-        let mut file = self.file.lock().unwrap();
+        let mut file = self.file.lock().await;
         let mut uncached_pages = Vec::with_capacity(uncached_ids.len());
         for page_id in uncached_ids {
-            file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64))?;
+            file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64)).await?;
             let mut buffer = vec![0u8; PAGE_SIZE];
-            file.read_exact(&mut buffer)?;
+            file.read_exact(&mut buffer).await?;
             let page = Page::from_bytes(&buffer)?;
             let page_arc = Arc::new(page);
             self.buffer_pool.put_page(page_id, page_arc.clone());
@@ -235,10 +237,10 @@ impl Manager {
             let page = if let Some(cached_page) = self.buffer_pool.get_page(page_id) {
                 cached_page
             } else {
-                let mut file = self.file.lock().unwrap();
-                file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64))?;
+                let mut file = self.file.lock().await;
+                file.seek(SeekFrom::Start(page_id * PAGE_SIZE as u64)).await?;
                 let mut buffer = vec![0u8; PAGE_SIZE];
-                file.read_exact(&mut buffer)?;
+                file.read_exact(&mut buffer).await?;
                 let page = Page::from_bytes(&buffer)?;
                 let page_arc = Arc::new(page);
                 self.buffer_pool.put_page(page_id, page_arc.clone());

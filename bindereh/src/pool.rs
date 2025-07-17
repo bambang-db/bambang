@@ -5,10 +5,20 @@ use std::{
 
 use crate::page::Page;
 
+#[derive(Debug)]
+struct LRUNode {
+    page_id: u64,
+    page: Arc<Page>,
+    prev: Option<u64>,
+    next: Option<u64>,
+}
+
 pub struct Pool {
-    cache: Arc<Mutex<HashMap<u64, Arc<Page>>>>,
+    cache: Arc<Mutex<HashMap<u64, LRUNode>>>,
     dirty_pages: Arc<Mutex<HashMap<u64, Arc<Page>>>>,
     max_pages: usize,
+    head: Arc<Mutex<Option<u64>>>,
+    tail: Arc<Mutex<Option<u64>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,27 +35,126 @@ impl Pool {
             cache: Arc::new(Mutex::new(HashMap::new())),
             dirty_pages: Arc::new(Mutex::new(HashMap::new())),
             max_pages,
+            head: Arc::new(Mutex::new(None)),
+            tail: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn get_page(&self, page_id: u64) -> Option<Arc<Page>> {
-        self.cache.lock().unwrap().get(&page_id).cloned()
+        let mut cache = self.cache.lock().unwrap();
+        if let Some(node) = cache.get_mut(&page_id) {
+            let page = node.page.clone();
+            // Move to front (most recently used)
+            self.move_to_front(page_id, &mut cache);
+            Some(page)
+        } else {
+            None
+        }
     }
 
-    pub fn put_page(&self, page_id: u64, node: Arc<Page>) {
+    pub fn put_page(&self, page_id: u64, page: Arc<Page>) {
         let mut cache = self.cache.lock().unwrap();
-
-        // TODO: Implement Real LRU
-        // This is just mimic BufferPool behavior
-        if cache.len() >= self.max_pages {
-            let first_key = *cache.keys().next().unwrap();
-            cache.remove(&first_key);
+        
+        if cache.contains_key(&page_id) {
+            // Update existing page and move to front
+            if let Some(node) = cache.get_mut(&page_id) {
+                node.page = page.clone();
+            }
+            self.move_to_front(page_id, &mut cache);
+        } else {
+            // Add new page
+            if cache.len() >= self.max_pages {
+                self.evict_lru(&mut cache);
+            }
+            
+            let new_node = LRUNode {
+                page_id,
+                page: page.clone(),
+                prev: None,
+                next: *self.head.lock().unwrap(),
+            };
+            
+            // Update head's prev pointer
+            if let Some(old_head) = *self.head.lock().unwrap() {
+                if let Some(head_node) = cache.get_mut(&old_head) {
+                    head_node.prev = Some(page_id);
+                }
+            } else {
+                // First node, set as tail too
+                *self.tail.lock().unwrap() = Some(page_id);
+            }
+            
+            *self.head.lock().unwrap() = Some(page_id);
+            cache.insert(page_id, new_node);
         }
 
-        cache.insert(page_id, node.clone());
+        if page.is_dirty {
+            self.dirty_pages.lock().unwrap().insert(page_id, page);
+        }
+    }
 
-        if node.is_dirty {
-            self.dirty_pages.lock().unwrap().insert(page_id, node);
+    fn move_to_front(&self, page_id: u64, cache: &mut HashMap<u64, LRUNode>) {
+        if Some(page_id) == *self.head.lock().unwrap() {
+            return; // Already at front
+        }
+
+        // Remove from current position
+        if let Some(node) = cache.get(&page_id) {
+            let prev_id = node.prev;
+            let next_id = node.next;
+
+            if let Some(prev) = prev_id {
+                if let Some(prev_node) = cache.get_mut(&prev) {
+                    prev_node.next = next_id;
+                }
+            }
+
+            if let Some(next) = next_id {
+                if let Some(next_node) = cache.get_mut(&next) {
+                    next_node.prev = prev_id;
+                }
+            } else {
+                // This was the tail
+                *self.tail.lock().unwrap() = prev_id;
+            }
+        }
+
+        // Move to front
+        if let Some(node) = cache.get_mut(&page_id) {
+            node.prev = None;
+            node.next = *self.head.lock().unwrap();
+        }
+
+        if let Some(old_head) = *self.head.lock().unwrap() {
+            if let Some(head_node) = cache.get_mut(&old_head) {
+                head_node.prev = Some(page_id);
+            }
+        }
+
+        *self.head.lock().unwrap() = Some(page_id);
+    }
+
+    fn evict_lru(&self, cache: &mut HashMap<u64, LRUNode>) {
+        if let Some(tail_id) = *self.tail.lock().unwrap() {
+            if let Some(tail_node) = cache.get(&tail_id) {
+                let prev_id = tail_node.prev;
+                
+                // Update tail
+                *self.tail.lock().unwrap() = prev_id;
+                
+                if let Some(prev) = prev_id {
+                    if let Some(prev_node) = cache.get_mut(&prev) {
+                        prev_node.next = None;
+                    }
+                } else {
+                    // List becomes empty
+                    *self.head.lock().unwrap() = None;
+                }
+                
+                // Remove from dirty pages if present
+                self.dirty_pages.lock().unwrap().remove(&tail_id);
+                cache.remove(&tail_id);
+            }
         }
     }
 
@@ -94,7 +203,7 @@ impl Pool {
 
     /// Remove a specific page from cache (but not from dirty pages)
     pub fn remove_page(&self, page_id: u64) -> Option<Arc<Page>> {
-        self.cache.lock().unwrap().remove(&page_id)
+        self.cache.lock().unwrap().remove(&page_id).map(|node| node.page)
     }
 
     /// Get all cached page IDs
@@ -111,7 +220,7 @@ impl Pool {
     pub fn evict_oldest(&self) -> Option<Arc<Page>> {
         let mut cache = self.cache.lock().unwrap();
         if let Some(&first_key) = cache.keys().next() {
-            cache.remove(&first_key)
+            cache.remove(&first_key).map(|node| node.page)
         } else {
             None
         }

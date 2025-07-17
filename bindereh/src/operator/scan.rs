@@ -1,6 +1,6 @@
 use crate::operator::compare::{
     evaluate_predicate_optimized, evaluate_predicate_optimized_static,
-    extract_predicate_column_indices, sort_rows,
+    extract_predicate_column_indices, sort_rows, evaluate_predicate_fast,
 };
 use crate::{manager::Manager, operator::tree::TreeOperations, page::Page};
 use shared_types::{ScanOptions, ScanResult, Schema, StorageError};
@@ -22,9 +22,9 @@ pub struct ReadAheadConfig {
 impl Default for ReadAheadConfig {
     fn default() -> Self {
         Self {
-            buffer_size: 12,
+            buffer_size: 256,  // Increased from 64 to 256 pages
             enabled: true,
-            prefetch_threshold: 4,
+            prefetch_threshold: 16,  // Increased from 4 to 16 pages
         }
     }
 }
@@ -289,9 +289,13 @@ impl ScanOperation {
 
             pages_read += 1;
 
+            // Batch process rows for better performance
+            let mut batch_filtered = Vec::new();
+            
             for row in &leaf_page.values {
                 total_scanned += 1;
 
+                // Early termination check
                 if let Some(eff_limit) = effective_limit {
                     if filtered_count >= eff_limit {
                         current_leaf_id = None;
@@ -299,6 +303,7 @@ impl ScanOperation {
                     }
                 }
 
+                // Fast predicate evaluation - fail fast on first condition
                 if let Some(ref predicate) = options.predicate {
                     if let Some(ref schema) = options.schema {
                         if !evaluate_predicate_optimized(
@@ -313,17 +318,36 @@ impl ScanOperation {
                 }
 
                 filtered_count += 1;
-
+                batch_filtered.push(row);
+                
+                // Process in batches of 1000 for better cache locality
+                if batch_filtered.len() >= 1000 {
+                    for batch_row in batch_filtered.drain(..) {
+                        let projected_row = if let Some(ref indices) = projection_indices {
+                            if let Some(ref schema) = options.schema {
+                                schema.project_row(batch_row, indices)
+                            } else {
+                                batch_row.clone()
+                            }
+                        } else {
+                            batch_row.clone()
+                        };
+                        result_rows.push(projected_row);
+                    }
+                }
+            }
+            
+            // Process remaining batch
+            for batch_row in batch_filtered {
                 let projected_row = if let Some(ref indices) = projection_indices {
                     if let Some(ref schema) = options.schema {
-                        schema.project_row(row, indices)
+                        schema.project_row(batch_row, indices)
                     } else {
-                        row.clone()
+                        batch_row.clone()
                     }
                 } else {
-                    row.clone()
+                    batch_row.clone()
                 };
-
                 result_rows.push(projected_row);
             }
 
@@ -604,7 +628,11 @@ impl ScanOperation {
 
                 if let Some(ref predicate) = options.predicate {
                     if let Some(ref schema) = options.schema {
-                        if !evaluate_predicate_optimized_static(
+                        if let Some(ref indices) = predicate_column_indices {
+                            if !evaluate_predicate_fast(predicate, row, indices) {
+                                continue;
+                            }
+                        } else if !evaluate_predicate_optimized_static(
                             predicate,
                             row,
                             schema,
